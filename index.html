@@ -5,12 +5,12 @@
   <meta name="theme-color" content="#050b1d">
   <meta name="description" content="Turn your PDFs into a searchable knowledge base. Ask questions in English or Roman Urdu and get answers grounded in your documents.">
   <title>Query Assistant — Your documents. A world of answers.</title>
-  <link rel="icon" type="image/svg+xml" href="assets/query-assistant-logo.svg">
+  <link rel="icon" type="image/png" href="assets/Query-Assistant-logo.png">
   <link rel="stylesheet" href="styles.css">
 </head>
 <body>
   <header class="nav shell">
-    <a class="brand" href="#"><span class="brand-icon" aria-hidden="true"><img src="assets/query-assistant-logo.svg" alt="" width="36" height="36"></span>Query Assistant<span class="brand-dot">.</span></a>
+    <a class="brand" href="#" aria-label="Query Assistant"><span class="brand-icon" aria-hidden="true"><img src="assets/Query-Assistant-logo.png" alt="" width="75" height="75"></span><span class="brand-name">uery Assistant</span></a>
     <nav aria-label="Main navigation"><a href="#workspace">Workspace</a><a href="#how-it-works">How it works</a></nav>
     <a class="workspace-link" href="#workspace">Open Workspace <span aria-hidden="true">↗</span></a>
   </header>
@@ -40,6 +40,7 @@
           <label class="field-label" for="domain">CHOOSE YOUR ASSISTANT</label>
           <select id="domain" disabled><option>Connecting to backend…</option></select>
           <div class="knowledge-actions"><button id="new-domain" class="button secondary" disabled>+ New knowledge base</button><button id="rename-domain" class="button secondary" hidden disabled>Rename</button></div>
+          <button id="delete-domain" class="danger" type="button" hidden disabled>Delete this knowledge base</button>
           <p class="assistant-description" id="assistant-description">Connect your backend to load your assistants and documents.</p>
           <div class="divider"></div>
           <div class="document-heading"><span>Your documents</span><span id="file-count" class="count">0</span></div>

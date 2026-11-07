@@ -3,6 +3,9 @@ export async function request(base, path, options = {}) {
   try { response = await fetch(`${base.replace(/\/$/, '')}/api${path}`, options); }
   catch { throw new Error('Cannot reach the backend. Start api_server.py on port 8000, then reconnect.'); }
   if (!response.ok) {
+    if (response.status === 405 && options.method === 'DELETE') {
+      throw new Error('Deletion is not available in the running backend. Restart api_server.py, refresh this page, and try again. Nothing was deleted.');
+    }
     const body = await response.json().catch(() => ({}));
     throw new Error(typeof body.detail === 'string' ? body.detail : `Request failed (${response.status}).`);
   }

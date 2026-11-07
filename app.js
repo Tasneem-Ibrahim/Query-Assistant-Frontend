@@ -9,7 +9,8 @@ function node(tag, className, text) { const el = document.createElement(tag); if
 function notice(message = '') { $('notice').textContent = message; $('notice').hidden = !message; }
 function controls() {
   const unavailable = !state.online || state.busy;
-  for (const id of ['domain', 'bundled', 'refresh', 'reset', 'new-domain', 'rename-domain']) $(id).disabled = unavailable;
+  for (const id of ['domain', 'bundled', 'refresh', 'reset', 'new-domain', 'rename-domain', 'delete-domain']) $(id).disabled = unavailable;
+  $('delete-domain').disabled = unavailable || !state.domains.find(d => d.key === state.key)?.custom;
   $('pdf').disabled = unavailable;
   $('upload').disabled = unavailable || !state.file;
   $('question').disabled = unavailable || !state.status?.chunks;
@@ -83,6 +84,7 @@ async function selectDomain() {
   const domain = state.domains.find(d => d.key === state.key);
   $('chat-title').textContent = domain.label;
   $('rename-domain').hidden = !domain.custom;
+  $('delete-domain').hidden = !domain.custom;
   $('bundled').textContent = domain.custom ? 'Process saved documents' : 'Use bundled documents';
   $('assistant-description').textContent = domain.custom ? 'Add PDFs on any topic and explore them together.' : state.key === 'legal_assistant' ? 'Understand your contracts, clauses, and obligations.' : 'Explore orders, delivery, returns, and support policies.';
   renderMessages();
@@ -156,6 +158,21 @@ $('reset').addEventListener('click', async () => {
   if (!confirm('Reset this assistant’s knowledge base? This removes its searchable passages and processing registry. The PDF files are kept.')) return;
   state.busy = true; controls();
   try { await json(`/domains/${encodeURIComponent(state.key)}/reset`, {}); state.histories[state.key] = []; state.results[state.key] = []; renderMessages(); await refresh(); notice('Knowledge base reset. Process documents again to start a new conversation.'); } catch (e) { notice(e.message); } finally { state.busy = false; controls(); }
+});
+$('delete-domain').addEventListener('click', async () => {
+  const domain = state.domains.find(d => d.key === state.key);
+  if (state.busy || !domain?.custom) return;
+  if (!confirm(`Delete “${domain.label}” permanently? Its saved PDFs, vectors, and conversation will be removed. Other knowledge bases will stay unchanged.`)) return;
+  state.busy = true; controls();
+  try {
+    await request(base, `/domains/${encodeURIComponent(domain.key)}`, { method: 'DELETE' });
+    delete state.histories[domain.key]; delete state.results[domain.key];
+    state.domains = state.domains.filter(d => d.key !== domain.key);
+    $('domain').replaceChildren(...state.domains.map(d => { const option = node('option', '', d.label); option.value = d.key; return option; }));
+    await selectDomain();
+    notice(`“${domain.label}” and its saved PDFs and vectors have been deleted.`);
+  } catch (e) { notice(e.message); }
+  finally { state.busy = false; controls(); }
 });
 $('connection').addEventListener('click', () => { $('api-url').value = base; $('settings').showModal(); });
 $('close-settings').addEventListener('click', () => $('settings').close());

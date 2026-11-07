@@ -70,7 +70,7 @@ Chat history is stored in browser memory and is cleared on page reload. Document
 ocr-frontend/
 |-- assets/
 |   |-- background-ocr.png
-|   `-- query-assistant-logo.svg
+|   `-- Query-Assistant-logo.png
 |-- tests/api.test.mjs
 |-- index.html             # Page structure and dialogs
 |-- styles.css             # Layout, typography, and animations

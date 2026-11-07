@@ -21,3 +21,11 @@ test('request preserves backend error details and constructs the route', async (
   globalThis.fetch = async url => { assert.equal(url, 'http://localhost:8000/api/health'); return new Response(JSON.stringify({ detail: 'Missing configuration' }), { status: 500 }); };
   try { await assert.rejects(request('http://localhost:8000/', '/health'), /Missing configuration/); } finally { globalThis.fetch = original; }
 });
+
+test('delete on an older backend explains that restart is needed', async () => {
+  const original = globalThis.fetch;
+  globalThis.fetch = async () => new Response(JSON.stringify({ detail: 'Method Not Allowed' }), { status: 405 });
+  try {
+    await assert.rejects(request('http://localhost:8000', '/domains/custom_example', { method: 'DELETE' }), /Restart api_server.py.*Nothing was deleted/);
+  } finally { globalThis.fetch = original; }
+});

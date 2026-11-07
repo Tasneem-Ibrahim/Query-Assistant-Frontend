@@ -93,27 +93,50 @@
 @media (prefers-reduced-motion: reduce) {
   .workspace-link:is(:hover, :focus-visible) span { transform: none; }
 }
+.nav .brand {
+  font-family: 'Manrope', 'Segoe UI', sans-serif;
+  font-size: 27px;
+  font-weight: 750;
+  letter-spacing: -1.2px;
+  line-height: 1.15;
+}
+.brand-name {
+  opacity: 0.8;
+  font-style: italic;
+  font-synthesis: style;
+  white-space: nowrap;
+  color: #edc98b;
+  background-image:
+    linear-gradient(175deg, #ffffff00 25%, #fff5cebb 43%, #ffffff00 47%, #071b4970 53%, #ffffff00 65%),
+    linear-gradient(105deg, #b77c26 0%, #edc98b 18%, #fff0bd 30%, #9bcdf5 52%, #518aff 75%, #a9d9ff 100%);
+  background-clip: text;
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+}
 .brand-icon {
-  width: 42px;
-  height: 42px;
+  width: 48px;
+  height: 48px;
   padding: 0;
   flex-shrink: 0;
-  border-radius: 12px;
-  background: linear-gradient(145deg, #8bbcff22, #376bc715);
-  border-color: #a8ccff3d;
-  box-shadow: inset 0 1px 0 #ffffff22, 0 0 22px #679dff18;
+  overflow: visible;
+  border-radius: 0;
+  background: transparent;
+  border: 0;
+  box-shadow: none;
 }
 .brand-icon img {
   display: block;
-  filter: drop-shadow(0 0 5px #b4d5ff66);
-  transition: filter .3s ease, transform .3s ease;
+  opacity: 0.8;
+  width: 75px;
+  height: 75px;
+  max-width: none;
+  flex-shrink: 0;
+  object-fit: contain;
+  transform: translateY(4px);
+  filter: brightness(1.15);
 }
-.brand:hover .brand-icon img {
-  filter: drop-shadow(0 0 8px #c5e0ffaa);
-  transform: rotate(8deg) scale(1.06);
-}
-@media (prefers-reduced-motion: reduce) {
-  .brand:hover .brand-icon img { transform: none; }
+@media (max-width: 760px) {
+  .nav .brand { font-size: 22px; letter-spacing: -.8px; }
 }
 :is(.hero-actions .primary, #upload, #send) {
   position: relative;
