@@ -17,6 +17,7 @@ function controls() {
   $('send').disabled = unavailable || !state.status?.chunks || !$('question').value.trim();
   $('clear').disabled = state.busy;
   $('connection').disabled = state.busy;
+  document.querySelectorAll('.delete-document').forEach(button => { button.disabled = unavailable; });
   $('chat-mode').disabled = state.busy;
   $('search-mode').disabled = state.busy;
 }
@@ -60,15 +61,20 @@ function renderMessages() {
   box.scrollTop = box.scrollHeight;
 }
 function renderStatus() {
-  const files = Object.values(state.status?.files || {});
+  const files = Object.entries(state.status?.files || {});
   $('file-count').textContent = files.length;
   $('chunk-count').textContent = state.status ? `${state.status.chunks} searchable passages` : 'Status unavailable';
   $('documents').replaceChildren();
-  for (const file of files) {
+  for (const [fileHash, file] of files) {
     const item = node('div', 'document'); const info = node('div', 'document-info');
     const title = node('strong', '', file.name); title.title = file.name;
     info.append(title, node('small', '', `${file.pages} pages · ${file.chunks} passages`));
-    item.append(node('span', 'mini-file', 'PDF'), info); $('documents').append(item);
+    const remove = node('button', 'delete-document');
+    remove.type = 'button'; remove.title = `Delete ${file.name}`;
+    remove.setAttribute('aria-label', `Delete ${file.name}`);
+    remove.innerHTML = '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 6h18M9 6V4h6v2M5 6l1 14h12l1-14M10 10v6M14 10v6"/></svg>';
+    remove.addEventListener('click', () => deleteDocument(fileHash, file.name));
+    item.append(node('span', 'mini-file', 'PDF'), info, remove); $('documents').append(item);
   }
   if (!files.length) $('documents').append(node('p', 'empty-documents', 'No PDFs processed yet. Upload yours or try the bundled documents.'));
   controls();
@@ -78,6 +84,20 @@ async function refresh() {
   state.status = null; controls();
   try { const result = await json(`/domains/${encodeURIComponent(key)}/status`); if (key === state.key) state.status = result; }
   finally { renderStatus(); }
+}
+async function deleteDocument(fileHash, filename) {
+  if (state.busy || !state.online) return;
+  if (!confirm(`Delete “${filename}” from this knowledge base? Its saved PDF and searchable passages will be removed. Other documents will stay unchanged.`)) return;
+  const key = state.key;
+  state.busy = true; controls();
+  try {
+    await request(base, `/domains/${encodeURIComponent(key)}/documents/${encodeURIComponent(fileHash)}`, { method: 'DELETE' });
+    // Old answers may still quote the removed document.
+    delete state.histories[key]; delete state.results[key];
+    renderMessages(); await refresh();
+    notice(`“${filename}” and its searchable passages have been deleted.`);
+  } catch (e) { notice(e.message); }
+  finally { state.busy = false; controls(); }
 }
 async function selectDomain() {
   state.key = $('domain').value; state.file = null; $('pdf').value = ''; $('selected-file').textContent = ''; $('question').value = ''; $('processing').hidden = true; notice();
