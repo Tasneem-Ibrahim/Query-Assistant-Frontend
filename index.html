@@ -1,0 +1,73 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#050b1d">
+  <meta name="description" content="Turn your PDFs into a searchable knowledge base. Ask questions in English or Roman Urdu and get answers grounded in your documents.">
+  <title>Query Assistant — Your documents. A world of answers.</title>
+  <link rel="icon" type="image/svg+xml" href="assets/query-assistant-logo.svg">
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <header class="nav shell">
+    <a class="brand" href="#"><span class="brand-icon" aria-hidden="true"><img src="assets/query-assistant-logo.svg" alt="" width="36" height="36"></span>Query Assistant<span class="brand-dot">.</span></a>
+    <nav aria-label="Main navigation"><a href="#workspace">Workspace</a><a href="#how-it-works">How it works</a></nav>
+    <a class="workspace-link" href="#workspace">Open Workspace <span aria-hidden="true">↗</span></a>
+  </header>
+
+  <main>
+    <section class="hero shell" aria-labelledby="hero-title">
+      <div class="hero-copy">
+        <div class="eyebrow"><span class="spark">✦</span> YOUR KNOWLEDGE, CONNECTED <span class="tag">RAG POWERED</span></div>
+        <h1 id="hero-title">Your documents.<br>A world of <span class="gradient-text">answers.</span></h1>
+        <p>Turn your PDFs into conversations. Get clear answers backed by your documents.</p>
+        <div class="hero-actions"><a href="#workspace" class="button primary">Explore your knowledge <span>↗</span></a><a href="#how-it-works" class="text-link">See how it works <span>↓</span></a></div>
+        <div class="hero-notes"><span>✓ Page-level citations</span><span>✓ English & Roman Urdu</span></div>
+      </div>
+      <div class="hero-visual" aria-hidden="true">
+        <div class="orbit orbit-one"></div><div class="orbit orbit-two"></div><div class="orbit-core"><span>✦</span></div>
+        <div class="floating-card document-card"><div class="mini-file">PDF</div><div><strong>Your documents</strong><small>Every page. Every detail.</small></div><span class="small-check">✓</span></div>
+        <div class="floating-card answer-card"><span class="answer-star">✦</span><div><strong>Clarity, one question away.</strong><div class="skeleton long"></div><div class="skeleton short"></div><span class="citation-pill">↗ Grounded in your sources</span></div></div>
+        <span class="floating-label label-one">Extract</span><span class="floating-label label-two">Retrieve</span><span class="floating-label label-three">Understand</span><span class="particle p-one"></span><span class="particle p-two"></span><span class="particle p-three"></span>
+      </div>
+    </section>
+
+    <section class="workspace shell" id="workspace" aria-labelledby="workspace-title">
+      <div class="section-heading"><div><div class="eyebrow">THE INTELLIGENCE WORKSPACE</div><h2 id="workspace-title">A little curiosity. A lot of clarity.</h2></div><span class="workspace-label"><span></span> Your document workspace</span></div>
+      <div class="workspace-grid">
+        <aside class="knowledge panel">
+          <div class="panel-title"><h3>Knowledge base</h3><span class="subtle-icon">▤</span></div>
+          <label class="field-label" for="domain">CHOOSE YOUR ASSISTANT</label>
+          <select id="domain" disabled><option>Connecting to backend…</option></select>
+          <div class="knowledge-actions"><button id="new-domain" class="button secondary" disabled>+ New knowledge base</button><button id="rename-domain" class="button secondary" hidden disabled>Rename</button></div>
+          <p class="assistant-description" id="assistant-description">Connect your backend to load your assistants and documents.</p>
+          <div class="divider"></div>
+          <div class="document-heading"><span>Your documents</span><span id="file-count" class="count">0</span></div>
+          <div id="documents" class="documents"><p class="empty-documents">Your processed PDFs will appear here.</p></div>
+          <label class="upload-zone" id="dropzone" for="pdf"><span class="upload-symbol">↑</span><strong>Drop your PDF here</strong><span>or click to browse · PDF files only</span><input id="pdf" type="file" accept="application/pdf,.pdf"></label>
+          <p id="selected-file" class="selected-file"></p>
+          <button id="upload" class="button primary full" disabled>Upload & process <span>↗</span></button>
+          <button id="bundled" class="button secondary full" disabled>Use bundled documents</button>
+          <div id="processing" class="processing" hidden><span class="field-label">PROCESSING ACTIVITY</span><pre id="logs" role="log" aria-live="polite"></pre></div>
+          <details class="advanced"><summary>Processing settings</summary><label><input type="checkbox" id="use-llm" checked> Use LLM normalization</label><label><input type="checkbox" id="force"> Reprocess existing PDF</label><label for="top-k">Retrieved passages <input type="number" id="top-k" value="5" min="1" max="20"></label><button class="button secondary full" id="connection" type="button">Connection settings</button><button id="reset" class="danger" disabled>Reset this knowledge base</button></details>
+          <div class="knowledge-footer"><span class="status-dot"></span><span id="chunk-count">No knowledge loaded</span><button id="refresh" title="Refresh document status" aria-label="Refresh document status">↻</button></div>
+        </aside>
+
+        <section class="chat panel" aria-label="Document conversation">
+          <div class="chat-header"><div class="chat-heading"><span class="assistant-avatar">✦</span><div><h3 id="chat-title">Document assistant</h3><span>Answers grounded in your documents.</span></div></div><button class="icon-button" id="clear" title="Clear this conversation" aria-label="Clear this conversation">↺</button></div>
+          <div class="chat-tabs" role="group" aria-label="Workspace mode"><button class="active" id="chat-mode" aria-pressed="true">✦ Ask your documents</button><button id="search-mode" aria-pressed="false">⌕ Search passages</button></div>
+          <div class="messages" id="messages" aria-live="polite"></div>
+          <div class="composer-wrap"><div class="notice" id="notice" role="status" hidden></div><form id="question-form"><label class="sr-only" for="question">Your question</label><textarea id="question" rows="1" maxlength="12000" placeholder="What would you like to know?" disabled></textarea><button class="send" id="send" type="submit" aria-label="Send question" disabled>↑</button></form><div class="composer-footer"><span><span class="spark">✦</span> Grounded in your documents</span><span>Enter to send · Shift + Enter for a new line</span></div></div>
+        </section>
+      </div>
+    </section>
+
+    <section class="how shell" id="how-it-works"><div class="section-heading"><div><div class="eyebrow">FROM INFORMATION TO UNDERSTANDING</div><h2>Behind every answer, your knowledge.</h2></div><p>A thoughtful pipeline. A simpler experience.</p></div><div class="steps"><article><span class="step-number">01 /</span><h3>Bring your documents <span>↗</span></h3><p>Upload a PDF. Text and embedded images are extracted with OCR, so more of your document becomes searchable.</p></article><article><span class="step-number">02 /</span><h3>Connect the knowledge <span>⌘</span></h3><p>Content is cleaned, organized into passages, and embedded in a dedicated Qdrant knowledge base.</p></article><article><span class="step-number">03 /</span><h3>Ask. Discover. Understand. <span>✦</span></h3><p>Ask naturally in English or Roman Urdu. Get relevant answers with document names, pages, and supporting excerpts.</p></article></div></section>
+  </main>
+  <footer class="shell"><a class="brand" href="#">Query Assistant<span class="brand-dot">.</span></a><span>Less searching. More understanding.</span><span>Built on your knowledge <span class="spark">✦</span></span></footer>
+
+  <dialog id="domain-dialog"><form id="domain-form"><div class="panel-title"><h3 id="domain-dialog-title">New knowledge base</h3><button type="button" class="icon-button" id="close-domain" aria-label="Close">×</button></div><p id="domain-help">Choose any topic and give it your own name. Then upload one or more related PDFs. Your knowledge base stays saved in the dropdown.</p><label class="field-label" for="domain-name">KNOWLEDGE BASE NAME</label><input id="domain-name" type="text" maxlength="80" required placeholder="e.g. Biology Notes or My Research"><p id="domain-error" role="alert" hidden></p><button id="save-domain" class="button primary full" type="submit">Create knowledge base ↗</button></form></dialog>
+  <dialog id="settings"><form id="settings-form"><div class="panel-title"><h3>Backend connection</h3><button type="button" class="icon-button" id="close-settings" aria-label="Close settings">×</button></div><p>Run the FastAPI bridge using <code>uvicorn api_server:app --port 8000</code>.</p><label class="field-label" for="api-url">API SERVER URL</label><input id="api-url" type="url" required placeholder="http://localhost:8000"><p class="settings-help">Local connections use port 3000, which your backend allows through CORS. No API keys belong in this frontend.</p><button class="button primary full" type="submit">Save & reconnect <span>↗</span></button></form></dialog>
+  <script type="module" src="app.js"></script>
+</body>
+</html>

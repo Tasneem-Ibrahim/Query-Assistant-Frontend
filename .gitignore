@@ -1,0 +1,32 @@
+# Dependencies and package-manager caches.
+node_modules/
+.npm/
+.pnpm-store/
+
+# Local configuration and secrets; keep shareable examples.
+.env
+.env.*
+!.env.example
+!.env.*.example
+
+# Generated build, test, and hosting files.
+dist/
+build/
+out/
+coverage/
+.nyc_output/
+.vercel/
+
+# Logs and local archives.
+*.log
+*.zip
+*.7z
+*.rar
+
+# OS and editor files.
+.DS_Store
+Thumbs.db
+Desktop.ini
+*.swp
+*.swo
+*~
