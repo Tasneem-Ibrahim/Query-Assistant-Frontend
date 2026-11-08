@@ -1,4 +1,4 @@
-import { request, readEvents, runJobs, setCredentials, clearCredentials } from './api.js';
+import { request, readEvents, runJobs, setCredentials, clearCredentials, restoreCredentials, persistCredentials } from './api.js';
 import { backendUrl } from './config.js';
 
 const $ = id => document.getElementById(id);
@@ -293,6 +293,7 @@ $('login-form').addEventListener('submit', async event => {
   try {
     setCredentials(base, $('admin-name').value.trim(), $('admin-password').value);
     await request(base, '/auth/session');
+    persistCredentials();
     $('admin-password').value = '';
     setPasswordVisible(false);
     $('login-gate').hidden = true;
@@ -304,3 +305,16 @@ $('login-form').addEventListener('submit', async event => {
   } finally { $('login-submit').disabled = false; }
 });
 renderMessages();
+async function resumeSession() {
+  if (!restoreCredentials(base)) return;
+  $('login-submit').disabled = true;
+  try {
+    await request(base, '/auth/session');
+    $('login-gate').hidden = true;
+    $('admin-app').hidden = false; $('admin-app').inert = false;
+    await connect();
+  } catch (error) {
+    $('login-error').textContent = error.message; $('login-error').hidden = false;
+  } finally { $('login-submit').disabled = false; }
+}
+resumeSession();

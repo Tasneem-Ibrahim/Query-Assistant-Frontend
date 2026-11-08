@@ -1,6 +1,36 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { readEvents, request, runJobs, setCredentials, clearCredentials } from '../api.js';
+import { readEvents, request, runJobs, setCredentials, clearCredentials, persistCredentials, restoreCredentials } from '../api.js';
+
+test('saved session restores only for its backend and logout removes it', async () => {
+  const originalStorage = globalThis.sessionStorage;
+  const originalFetch = globalThis.fetch;
+  const values = new Map();
+  globalThis.sessionStorage = {
+    getItem: key => values.get(key) ?? null,
+    setItem: (key, value) => values.set(key, value),
+    removeItem: key => values.delete(key),
+  };
+  try {
+    setCredentials('https://backend.example', 'Admin', 'test-password');
+    persistCredentials();
+    const reloaded = await import(`../api.js?session-test=${Date.now()}`);
+    assert.equal(reloaded.restoreCredentials('https://another.example'), false);
+    assert.equal(reloaded.restoreCredentials('https://backend.example/'), true);
+    globalThis.fetch = async (url, options) => {
+      assert.equal(options.headers.get('Authorization'), `Basic ${btoa('Admin:test-password')}`);
+      return new Response('{}');
+    };
+    await reloaded.request('https://backend.example', '/auth/session');
+    reloaded.clearCredentials();
+    assert.equal(restoreCredentials('https://backend.example'), false);
+    assert.equal(values.size, 0);
+  } finally {
+    clearCredentials();
+    globalThis.sessionStorage = originalStorage;
+    globalThis.fetch = originalFetch;
+  }
+});
 
 test('credentials are scoped to the signed-in backend and cleared on logout', async () => {
   const original = globalThis.fetch;

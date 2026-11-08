@@ -1,5 +1,20 @@
 let authorization = '';
 let authorizedBase = '';
+const sessionKey = 'query-assistant-admin-session';
+
+export function restoreCredentials(base) {
+  try {
+    const saved = JSON.parse(sessionStorage.getItem(sessionKey));
+    if (saved?.base !== base.replace(/\/$/, '') || typeof saved.authorization !== 'string' || !saved.authorization.startsWith('Basic ')) return false;
+    authorization = saved.authorization;
+    authorizedBase = saved.base;
+    return true;
+  } catch { return false; }
+}
+
+export function persistCredentials() {
+  try { sessionStorage.setItem(sessionKey, JSON.stringify({ base: authorizedBase, authorization })); } catch { /* Storage may be unavailable. */ }
+}
 
 export function setCredentials(base, username, password) {
   const bytes = new TextEncoder().encode(`${username}:${password}`);
@@ -7,7 +22,10 @@ export function setCredentials(base, username, password) {
   authorizedBase = base.replace(/\/$/, '');
 }
 
-export function clearCredentials() { authorization = ''; authorizedBase = ''; }
+export function clearCredentials() {
+  authorization = ''; authorizedBase = '';
+  try { sessionStorage.removeItem(sessionKey); } catch { /* Storage may be unavailable. */ }
+}
 
 export async function request(base, path, options = {}) {
   const headers = new Headers(options.headers);
