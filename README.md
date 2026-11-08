@@ -3,8 +3,11 @@
 Vercel deployment: use Framework Preset **Other**. The checked-in `vercel.json`
 runs `npm run build` and publishes `dist/` as static files. `server.mjs` is for
 local development only. Remove dashboard overrides that deploy it as a Node
-function. No frontend environment variables are required; set the backend
-origin in the website's Connection settings.
+function. Set `BACKEND_URL` in the frontend Vercel project to the backend HTTPS
+origin, such as `https://your-backend.vercel.app`, then redeploy. The build exposes
+only this public URL in `config.js`. Browser Connection settings can override it.
+Set `CORS_ORIGINS` in the backend project to your frontend's exact HTTPS origin
+and redeploy that project too. Keep all provider API keys on the backend.
 
 Supabase-backed deployments support resumable PDF processing. Set the backend
 origin in Connection settings. Uploads are limited to 4 MB per PDF; use **Resume
@@ -122,7 +125,7 @@ This is a static website. For Vercel, import the GitHub repository and configure
 
 Vercel can serve HTML, CSS, and JavaScript without a build step. See [Vercel build configuration](https://vercel.com/docs/builds/configure-a-build).
 
-Deploy the Python backend separately with persistent storage. Set its public HTTPS URL in connection settings and add the frontend's exact origin to the backend CORS allowlist. For a shared default, update the fallback URL in `app.js` before deploying. The local Node server is not the production runtime on Vercel.
+Deploy the Python backend separately with persistent storage. Set its public HTTPS URL in connection settings and add the frontend's exact origin to the backend CORS allowlist. For a shared default, set the frontend build environment variable `BACKEND_URL` before deploying. Without it, hosted builds request `/api` on their own origin, requiring a same-origin backend or proxy. Local development defaults to `http://localhost:8000`. The local Node server is not the production runtime on Vercel.
 
 ## Troubleshooting
 

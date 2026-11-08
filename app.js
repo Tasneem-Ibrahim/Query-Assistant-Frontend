@@ -1,8 +1,15 @@
 import { request, readEvents, runJobs } from './api.js';
+import { backendUrl } from './config.js';
 
 const $ = id => document.getElementById(id);
 let base;
-try { base = localStorage.getItem('pagewise-api') || 'http://localhost:8000'; } catch { base = 'http://localhost:8000'; }
+const local = ['localhost', '127.0.0.1', '[::1]'].includes(location.hostname);
+const defaultBase = backendUrl || (local ? 'http://localhost:8000' : location.origin);
+try {
+  const saved = localStorage.getItem('pagewise-api');
+  const staleLocal = saved && !local && ['localhost', '127.0.0.1', '[::1]'].includes(new URL(saved).hostname);
+  base = saved && !staleLocal ? saved : defaultBase;
+} catch { base = defaultBase; }
 const state = { domains: [], key: '', status: null, online: false, busy: false, mode: 'chat', histories: {}, results: {}, file: null, generation: 0 };
 const history = () => state.histories[state.key] ||= [];
 function node(tag, className, text) { const el = document.createElement(tag); if (className) el.className = className; if (text !== undefined) el.textContent = text; return el; }
@@ -209,7 +216,7 @@ $('close-settings').addEventListener('click', () => $('settings').close());
 $('settings-form').addEventListener('submit', event => {
   event.preventDefault(); const url = new URL($('api-url').value);
   if (!['http:', 'https:'].includes(url.protocol) || url.username || url.password || url.search || url.hash) { $('api-url').setCustomValidity('Use an HTTP or HTTPS server URL without credentials, query, or fragment.'); $('api-url').reportValidity(); return; }
-  base = url.href.replace(/\/$/, ''); try { localStorage.setItem('pagewise-api', base); } catch {} $('settings').close(); connect();
+  base = url.href.replace(/\/$/, '').replace(/\/api$/, ''); try { localStorage.setItem('pagewise-api', base); } catch {} $('settings').close(); connect();
 });
 $('api-url').addEventListener('input', () => $('api-url').setCustomValidity(''));
 let editingDomain = null;

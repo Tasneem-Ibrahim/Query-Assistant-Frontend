@@ -1,7 +1,7 @@
 export async function request(base, path, options = {}) {
   let response;
   try { response = await fetch(`${base.replace(/\/$/, '')}/api${path}`, options); }
-  catch { throw new Error('Cannot reach the backend. Start api_server.py on port 8000, then reconnect.'); }
+  catch { throw new Error(`Cannot reach the backend at ${base || location.origin}. Check the backend URL in Connection settings, HTTPS, and the backend CORS_ORIGINS setting.`); }
   if (!response.ok) {
     if (response.status === 405 && options.method === 'DELETE') {
       throw new Error('Deletion is not available in the running backend. Restart api_server.py, refresh this page, and try again. Nothing was deleted.');
