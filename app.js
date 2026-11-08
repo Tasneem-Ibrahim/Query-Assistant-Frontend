@@ -306,15 +306,24 @@ $('login-form').addEventListener('submit', async event => {
 });
 renderMessages();
 async function resumeSession() {
-  if (!restoreCredentials(base)) return;
+  if (!restoreCredentials(base)) {
+    $('session-loading').hidden = true;
+    $('login-gate').hidden = false;
+    return;
+  }
   $('login-submit').disabled = true;
   try {
     await request(base, '/auth/session');
+    $('session-loading').hidden = true;
     $('login-gate').hidden = true;
     $('admin-app').hidden = false; $('admin-app').inert = false;
     await connect();
   } catch (error) {
+    $('login-gate').hidden = false;
     $('login-error').textContent = error.message; $('login-error').hidden = false;
-  } finally { $('login-submit').disabled = false; }
+  } finally {
+    $('session-loading').hidden = true;
+    $('login-submit').disabled = false;
+  }
 }
 resumeSession();

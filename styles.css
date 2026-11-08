@@ -205,6 +205,7 @@
 }
 /* Admin credentials remain in memory only; the backend protects every API route. */
 .nav-actions { display: flex; align-items: center; gap: 20px; }
+.session-loading { position: relative; min-height: 100dvh; display: grid; place-items: center; padding: 24px; background: #050b1d; color: #aab7cf; font-size: 14px; }
 .admin-menu { position: relative; z-index: 10; }
 .admin-menu summary { display: flex; align-items: center; gap: 8px; padding: 12px 0; color: #dbe7ff; font-size: 13px; font-weight: 600; cursor: pointer; list-style: none; }
 .admin-menu summary::-webkit-details-marker { display: none; }
