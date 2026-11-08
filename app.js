@@ -38,7 +38,7 @@ function renderMessages() {
   const messages = state.mode === 'chat' ? history() : (state.results[state.key] || []);
   if (!messages.length) {
     const empty = node('div', 'chat-empty');
-    empty.append(node('div', 'empty-symbol', state.mode === 'chat' ? '✦' : '⌕'), node('h4', '', state.mode === 'chat' ? 'Good questions open new doors.' : 'Find the passage you need.'));
+    empty.append(node('div', 'empty-symbol', state.mode === 'chat' ? '✦' : '⌕'), node('h4', '', state.mode === 'chat' ? 'From Questions to Clarity, From Data to Insights' : 'Find the passage you need.'));
     const domain = state.domains.find(d => d.key === state.key);
     empty.append(node('p', '', state.mode === 'search' ? 'Find relevant excerpts in your documents.' : domain?.welcome || 'Connect your backend and add a PDF to get started.'));
     if (domain?.examples?.length) {
