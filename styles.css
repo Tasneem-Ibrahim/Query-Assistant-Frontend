@@ -110,28 +110,25 @@
 }
 .nav .brand {
   font-family: 'Manrope', 'Segoe UI', sans-serif;
-  font-size: 27px;
-  font-weight: 750;
-  letter-spacing: -1.2px;
+  font-size: 24px;
+  font-weight: 700;
+  letter-spacing: -.9px;
   line-height: 1.15;
+  gap: 11px;
 }
 .brand-name {
-  opacity: 0.8;
-  font-style: italic;
-  font-synthesis: style;
   white-space: nowrap;
-  color: #edc98b;
-  background-image:
-    linear-gradient(175deg, #ffffff00 25%, #fff5cebb 43%, #ffffff00 47%, #071b4970 53%, #ffffff00 65%),
-    linear-gradient(105deg, #b77c26 0%, #edc98b 18%, #fff0bd 30%, #9bcdf5 52%, #518aff 75%, #a9d9ff 100%);
-  background-clip: text;
-  -webkit-background-clip: text;
-  -webkit-text-fill-color: transparent;
+  color: #eef3ff;
+}
+.brand-name > span {
+  color: #9bbef8;
+  font-weight: 500;
 }
 .brand-icon {
   width: 48px;
   height: 48px;
   padding: 0;
+  margin-right: 0;
   flex-shrink: 0;
   overflow: visible;
   border-radius: 0;
@@ -141,17 +138,14 @@
 }
 .brand-icon img {
   display: block;
-  opacity: 0.8;
-  width: 75px;
-  height: 75px;
-  max-width: none;
+  width: 48px;
+  height: 48px;
   flex-shrink: 0;
   object-fit: contain;
-  transform: translateY(4px);
-  filter: brightness(1.15);
 }
 @media (max-width: 760px) {
-  .nav .brand { font-size: 22px; letter-spacing: -.8px; }
+  .nav .brand { font-size: 20px; letter-spacing: -.7px; gap: 9px; }
+  .brand-icon, .brand-icon img { width: 40px; height: 40px; }
 }
 :is(.hero-actions .primary, #upload, #send) {
   position: relative;
