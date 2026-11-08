@@ -1,6 +1,29 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { readEvents, request, runJobs } from '../api.js';
+import { readEvents, request, runJobs, setCredentials, clearCredentials } from '../api.js';
+
+test('credentials are scoped to the signed-in backend and cleared on logout', async () => {
+  const original = globalThis.fetch;
+  const seen = [];
+  globalThis.fetch = async (url, options) => { seen.push(options.headers.get('Authorization')); return new Response('{}'); };
+  try {
+    setCredentials('https://backend.example', 'Admin', 'test-password');
+    await request('https://backend.example', '/auth/session');
+    await request('https://another.example', '/health');
+    clearCredentials();
+    await request('https://backend.example', '/health');
+    assert.equal(seen[0], `Basic ${btoa('Admin:test-password')}`);
+    assert.equal(seen[1], null);
+    assert.equal(seen[2], null);
+  } finally { clearCredentials(); globalThis.fetch = original; }
+});
+
+test('unauthorized backend responses retain the login error', async () => {
+  const original = globalThis.fetch;
+  globalThis.fetch = async () => new Response(JSON.stringify({ detail: 'Please sign in.' }), { status: 401 });
+  try { await assert.rejects(request('https://backend.example', '/domains'), /Please sign in/); }
+  finally { globalThis.fetch = original; }
+});
 
 function streamed(parts) {
   return new Response(new ReadableStream({ start(controller) { for (const part of parts) controller.enqueue(new TextEncoder().encode(part)); controller.close(); } }));

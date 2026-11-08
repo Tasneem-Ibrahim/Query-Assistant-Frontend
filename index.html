@@ -9,9 +9,24 @@
   <link rel="stylesheet" href="styles.css">
 </head>
 <body>
+  <div id="login-gate" class="login-gate">
+    <form id="login-form" class="login-card">
+      <img src="assets/query-assistant-logo.svg" alt="" width="56" height="56">
+      <h1>Admin sign in</h1>
+      <p>Sign in to access your knowledge bases and documents.</p>
+      <label class="field-label" for="admin-name">NAME</label>
+      <input id="admin-name" name="username" autocomplete="username" value="Admin" required maxlength="80">
+      <label class="field-label" for="admin-password">PASSWORD</label>
+      <input id="admin-password" name="password" type="password" autocomplete="current-password" required maxlength="256">
+      <p id="login-error" role="alert" hidden></p>
+      <button id="login-submit" class="button primary full" type="submit">Sign in</button>
+      <button id="login-connection" class="text-link" type="button">Connection settings</button>
+    </form>
+  </div>
+  <div id="admin-app" hidden inert>
   <header class="nav shell">
     <a class="brand" href="#" aria-label="Query Assistant"><span class="brand-icon" aria-hidden="true"><img src="assets/query-assistant-logo.svg" alt="" width="48" height="48"></span><span class="brand-name">Query <span>Assistant</span></span></a>
-    <nav aria-label="Main navigation"><a href="#workspace">Workspace</a><a href="#how-it-works">How it works</a></nav>
+    <nav aria-label="Main navigation"><a href="#workspace">Workspace</a><a href="#how-it-works">How it works</a><button id="admin-logout" type="button" class="text-link">Sign out</button></nav>
     <a class="workspace-link" href="#workspace">Open Workspace <span aria-hidden="true">↗</span></a>
   </header>
 
@@ -67,6 +82,7 @@
   </main>
   <footer class="shell"><a class="brand" href="#">Query Assistant<span class="brand-dot">.</span></a><span>Less searching. More understanding.</span><span>Built on your knowledge <span class="spark">✦</span></span></footer>
 
+  </div>
   <dialog id="domain-dialog"><form id="domain-form"><div class="panel-title"><h3 id="domain-dialog-title">New knowledge base</h3><button type="button" class="icon-button" id="close-domain" aria-label="Close">×</button></div><p id="domain-help">Choose any topic and give it your own name. Then upload one or more related PDFs. Your knowledge base stays saved in the dropdown.</p><label class="field-label" for="domain-name">KNOWLEDGE BASE NAME</label><input id="domain-name" type="text" maxlength="80" required placeholder="e.g. Biology Notes or My Research"><p id="domain-error" role="alert" hidden></p><button id="save-domain" class="button primary full" type="submit">Create knowledge base ↗</button></form></dialog>
   <dialog id="settings"><form id="settings-form"><div class="panel-title"><h3>Backend connection</h3><button type="button" class="icon-button" id="close-settings" aria-label="Close settings">×</button></div><p>Run the FastAPI bridge using <code>uvicorn api_server:app --port 8000</code>.</p><label class="field-label" for="api-url">API SERVER URL</label><input id="api-url" type="url" required placeholder="http://localhost:8000"><p class="settings-help">Local connections use port 3000, which your backend allows through CORS. No API keys belong in this frontend.</p><button class="button primary full" type="submit">Save & reconnect <span>↗</span></button></form></dialog>
   <script type="module" src="app.js"></script>

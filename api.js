@@ -1,8 +1,25 @@
+let authorization = '';
+let authorizedBase = '';
+
+export function setCredentials(base, username, password) {
+  const bytes = new TextEncoder().encode(`${username}:${password}`);
+  authorization = `Basic ${btoa(String.fromCharCode(...bytes))}`;
+  authorizedBase = base.replace(/\/$/, '');
+}
+
+export function clearCredentials() { authorization = ''; authorizedBase = ''; }
+
 export async function request(base, path, options = {}) {
+  const headers = new Headers(options.headers);
+  if (authorization && authorizedBase === base.replace(/\/$/, '')) headers.set('Authorization', authorization);
   let response;
-  try { response = await fetch(`${base.replace(/\/$/, '')}/api${path}`, options); }
+  try { response = await fetch(`${base.replace(/\/$/, '')}/api${path}`, { ...options, headers, cache: 'no-store', redirect: 'error' }); }
   catch { throw new Error(`Cannot reach the backend at ${base || location.origin}. Check the backend URL in Connection settings, HTTPS, and the backend CORS_ORIGINS setting.`); }
   if (!response.ok) {
+    if (response.status === 401 && typeof window !== 'undefined') {
+      clearCredentials();
+      window.dispatchEvent(new Event('admin-login-required'));
+    }
     if (response.status === 405 && options.method === 'DELETE') {
       throw new Error('Deletion is not available in the running backend. Restart api_server.py, refresh this page, and try again. Nothing was deleted.');
     }

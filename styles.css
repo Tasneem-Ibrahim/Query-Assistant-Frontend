@@ -203,3 +203,15 @@
   :is(.hero-actions .primary, #upload) > span { transform: none; }
   :is(.hero-actions .primary, #upload, #send)::before { display: none; }
 }
+/* Admin credentials remain in memory only; the backend protects every API route. */
+.login-gate { position: relative; z-index: 1; isolation: isolate; min-height: 100dvh; display: grid; place-items: center; padding: 24px; background: #050b1d; }
+.login-gate[hidden], #admin-app[hidden] { display: none !important; }
+.login-card { position: relative; width: min(100%, 420px); padding: 32px; border: 1px solid #465b80; border-radius: 20px; background: #111e35; color: #eef3ff; box-shadow: 0 24px 64px #0008; }
+.login-card h1 { font-size: 28px; margin: 18px 0 10px; }
+.login-card p { color: #aab7cf; margin-bottom: 22px; }
+.login-card input { width: 100%; box-sizing: border-box; padding: 12px; margin: 8px 0 20px; border: 1px solid #3b4b6a; border-radius: 8px; background: #050b1d; color: #fff; font: inherit; }
+.login-card #login-error { color: #ffb8b8; overflow-wrap: anywhere; }
+.login-card .text-link { margin-top: 18px; }
+.login-card .field-label { font-size: 11px; color: #c6d5ee; }
+.login-card h1 { color: #f3f6ff; letter-spacing: -1px; }
+.login-card #login-connection { background: transparent; border: 0; padding: 8px 0; color: #bdd5ff; }

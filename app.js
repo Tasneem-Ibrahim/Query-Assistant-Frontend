@@ -1,4 +1,4 @@
-import { request, readEvents, runJobs } from './api.js';
+import { request, readEvents, runJobs, setCredentials, clearCredentials } from './api.js';
 import { backendUrl } from './config.js';
 
 const $ = id => document.getElementById(id);
@@ -252,4 +252,31 @@ $('domain-form').addEventListener('submit', async event => {
 });
 function chooseFileAfterCreate(file) { state.file = file; $('selected-file').textContent = `${file.name} · ${(file.size / 1024 / 1024).toFixed(2)} MB`; }
 $('domain-name').addEventListener('input', () => $('domain-name').setCustomValidity(''));
-renderMessages(); connect();
+function showLogin() {
+  clearCredentials();
+  state.online = false; state.status = null; state.domains = []; state.key = '';
+  state.histories = {}; state.results = {};
+  $('admin-app').hidden = true; $('admin-app').inert = true;
+  $('login-gate').hidden = false;
+  $('admin-password').value = '';
+  controls(); renderMessages(); renderStatus();
+}
+window.addEventListener('admin-login-required', showLogin);
+$('admin-logout').addEventListener('click', () => { clearCredentials(); location.reload(); });
+$('login-connection').addEventListener('click', () => { $('api-url').value = base; $('settings').showModal(); });
+$('login-form').addEventListener('submit', async event => {
+  event.preventDefault();
+  $('login-submit').disabled = true; $('login-error').hidden = true;
+  try {
+    setCredentials(base, $('admin-name').value.trim(), $('admin-password').value);
+    await request(base, '/auth/session');
+    $('admin-password').value = '';
+    $('login-gate').hidden = true;
+    $('admin-app').hidden = false; $('admin-app').inert = false;
+    await connect();
+  } catch (error) {
+    clearCredentials();
+    $('login-error').textContent = error.message; $('login-error').hidden = false;
+  } finally { $('login-submit').disabled = false; }
+});
+renderMessages();

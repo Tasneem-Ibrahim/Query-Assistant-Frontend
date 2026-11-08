@@ -139,3 +139,11 @@ Deploy the Python backend separately with persistent storage. Set its public HTT
 | Styling looks outdated | Refresh with Ctrl + F5. |
 
 Google Fonts are optional; the interface falls back to system fonts. Public backend access control is handled outside this frontend.
+# Admin login
+
+Deploy the matching protected backend with `ADMIN_USERNAME` and `ADMIN_PASSWORD`
+set in its environment. Sign in on the frontend with these credentials. Every
+API operation requires backend verification, including paid calls and deletion.
+Credentials remain in browser memory only; refreshing or signing out clears them.
+Do not configure the admin password in this static frontend or its build variables.
+
