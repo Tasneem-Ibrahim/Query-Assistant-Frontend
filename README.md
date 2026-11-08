@@ -1,5 +1,10 @@
 # Query Assistant | Frontend
 
+Supabase-backed deployments support resumable PDF processing. Set the backend
+origin in Connection settings. Uploads are limited to 4 MB per PDF; use **Resume
+saved documents** after interrupted processing. Deploy this frontend together
+with the updated backend; credentials remain on the backend.
+
 A responsive document intelligence workspace for uploading PDFs, searching passages, and asking questions with source citations.
 
 Built with HTML, CSS, and native JavaScript modules. A lightweight Node.js server supports local development; no frontend dependencies or build step are required.

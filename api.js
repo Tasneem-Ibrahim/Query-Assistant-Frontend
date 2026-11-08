@@ -37,3 +37,15 @@ export async function readEvents(response, onEvent) {
     if (!doneEvent) throw new Error('Processing ended before completion. Refresh the document status and try again.');
   } finally { await reader.cancel().catch(() => {}); reader.releaseLock(); }
 }
+
+export async function runJobs(base, key, jobs, onEvent) {
+  for (const job of jobs) {
+    let result = job;
+    while (result.status !== 'ready') {
+      result = await (await request(base, `/domains/${encodeURIComponent(key)}/documents/${encodeURIComponent(job.file_hash)}/step`, { method: 'POST' })).json();
+      if (!['pending', 'ready'].includes(result.status)) throw new Error('Unexpected document processing status. Resume saved documents to retry.');
+      if (result.message) onEvent({ type: 'log', message: result.message });
+    }
+    onEvent({ type: 'done', report: { ...result.report, status: 'ingested' } });
+  }
+}

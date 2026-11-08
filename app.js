@@ -1,4 +1,4 @@
-import { request, readEvents } from './api.js';
+import { request, readEvents, runJobs } from './api.js';
 
 const $ = id => document.getElementById(id);
 let base;
@@ -20,6 +20,8 @@ function controls() {
   document.querySelectorAll('.delete-document').forEach(button => { button.disabled = unavailable; });
   $('chat-mode').disabled = state.busy;
   $('search-mode').disabled = state.busy;
+  $('force').disabled = state.busy;
+  if (state.cloud) { $('reset').disabled = true; $('force').disabled = true; $('force').checked = false; }
 }
 async function json(path, body) { return (await request(base, path, body === undefined ? {} : { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) })).json(); }
 function sourceList(sources) {
@@ -61,14 +63,14 @@ function renderMessages() {
   box.scrollTop = box.scrollHeight;
 }
 function renderStatus() {
-  const files = Object.entries(state.status?.files || {});
+  const files = Object.entries({ ...state.status?.files, ...state.status?.pending_files });
   $('file-count').textContent = files.length;
   $('chunk-count').textContent = state.status ? `${state.status.chunks} searchable passages` : 'Status unavailable';
   $('documents').replaceChildren();
   for (const [fileHash, file] of files) {
     const item = node('div', 'document'); const info = node('div', 'document-info');
     const title = node('strong', '', file.name); title.title = file.name;
-    info.append(title, node('small', '', `${file.pages} pages · ${file.chunks} passages`));
+    info.append(title, node('small', '', state.status?.pending_files?.[fileHash] ? `${file.pages} pages · Processing incomplete` : `${file.pages} pages · ${file.chunks} passages`));
     const remove = node('button', 'delete-document');
     remove.type = 'button'; remove.title = `Delete ${file.name}`;
     remove.setAttribute('aria-label', `Delete ${file.name}`);
@@ -105,18 +107,21 @@ async function selectDomain() {
   $('chat-title').textContent = domain.label;
   $('rename-domain').hidden = !domain.custom;
   $('delete-domain').hidden = !domain.custom;
-  $('bundled').textContent = domain.custom ? 'Process saved documents' : 'Use bundled documents';
+  $('bundled').textContent = state.cloud ? 'Resume saved documents' : domain.custom ? 'Process saved documents' : 'Use bundled documents';
   $('assistant-description').textContent = domain.custom ? 'Add PDFs on any topic and explore them together.' : state.key === 'legal_assistant' ? 'Understand your contracts, clauses, and obligations.' : 'Explore orders, delivery, returns, and support policies.';
   renderMessages();
-  try { await refresh(); if (state.status && !state.status.chunks) notice(domain.custom ? 'Upload your first PDF to this knowledge base. You can add more PDFs on the same topic later.' : 'Add a PDF or use the bundled documents to start exploring.'); } catch (e) { notice(e.message); }
+  try { await refresh(); if (Object.keys(state.status?.pending_files || {}).length) notice('Some PDFs are incomplete. Click Resume saved documents to continue.'); else if (state.status && !state.status.chunks) notice(state.cloud || domain.custom ? 'Upload your first PDF to this knowledge base. You can add more PDFs on the same topic later.' : 'Add a PDF or use the bundled documents to start exploring.'); } catch (e) { notice(e.message); }
 }
 async function connect() {
   const generation = ++state.generation;
   state.online = false; state.status = null; state.domains = []; state.key = ''; controls(); renderStatus(); renderMessages();
   try {
-    const [health, domains] = await Promise.all([json('/health'), json('/domains')]);
+    const health = await json('/health');
+    if (!health.ok) throw new Error(health.configuration_errors?.join('. ') || 'Backend is not configured.');
+    const domains = await json('/domains');
     if (generation !== state.generation) return;
-    if (!health.ok || !Array.isArray(domains) || !domains.length) throw new Error('No assistants available from this backend.');
+    if (!Array.isArray(domains) || !domains.length) throw new Error('No assistants available from this backend.');
+    state.cloud = health.storage === 'supabase';
     state.domains = domains; state.online = true;
     $('domain').replaceChildren(...domains.map(d => { const option = node('option', '', d.label); option.value = d.key; return option; }));
     await selectDomain();
@@ -130,6 +135,7 @@ function chooseFile(file) {
   if (!file || state.busy) return;
   if (!file.name.toLowerCase().endsWith('.pdf')) { notice('Please choose a PDF file.'); return; }
   if (!file.size) { notice('This PDF is empty. Choose a different file.'); return; }
+  if (state.cloud && file.size > 4000000) { notice('Choose a PDF smaller than 4 MB. Split larger PDFs into smaller files.'); return; }
   state.file = file; $('selected-file').textContent = `${file.name} · ${(file.size / 1024 / 1024).toFixed(2)} MB`; notice(); controls();
 }
 async function ingest(bundled) {
@@ -139,10 +145,14 @@ async function ingest(bundled) {
   data.append('force', $('force').checked); data.append('use_llm', $('use-llm').checked);
   try {
     const response = await request(base, `/domains/${encodeURIComponent(state.key)}/ingest`, { method: 'POST', body: data });
-    await readEvents(response, event => {
+    const onEvent = event => {
       const log = event.type === 'done' ? `${event.report.name || event.report.file || 'Document'}: ${event.report.status}. ${event.report.chunks ?? 0} passages ready.` : event.message;
       if (log) { $('logs').append(document.createTextNode(log + '\n')); $('logs').scrollTop = $('logs').scrollHeight; }
-    });
+    };
+    if (response.headers.get('content-type')?.includes('application/json')) {
+      const { jobs } = await response.json();
+      await runJobs(base, state.key, jobs, onEvent);
+    } else await readEvents(response, onEvent);
     state.file = null; $('pdf').value = ''; $('selected-file').textContent = ''; notice('Your knowledge is ready. Ask a question or search the passages.');
   } catch (e) { notice(e.message); }
   finally { try { await refresh(); } catch (e) { notice(e.message); } state.busy = false; controls(); }

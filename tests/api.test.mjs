@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { readEvents, request } from '../api.js';
+import { readEvents, request, runJobs } from '../api.js';
 
 function streamed(parts) {
   return new Response(new ReadableStream({ start(controller) { for (const part of parts) controller.enqueue(new TextEncoder().encode(part)); controller.close(); } }));
@@ -27,5 +27,33 @@ test('delete on an older backend explains that restart is needed', async () => {
   globalThis.fetch = async () => new Response(JSON.stringify({ detail: 'Method Not Allowed' }), { status: 405 });
   try {
     await assert.rejects(request('http://localhost:8000', '/domains/custom_example', { method: 'DELETE' }), /Restart api_server.py.*Nothing was deleted/);
+  } finally { globalThis.fetch = original; }
+});
+
+test('cloud processing continues page jobs until ready and emits one completion', async () => {
+  const original = globalThis.fetch;
+  const events = [];
+  let calls = 0;
+  globalThis.fetch = async (url, options) => {
+    assert.equal(url, 'https://backend.example/api/domains/customer_support/documents/hash/step');
+    assert.equal(options.method, 'POST');
+    calls++;
+    return new Response(JSON.stringify({ status: calls === 2 ? 'ready' : 'pending', message: `page ${calls}`, report: { name: 'guide.pdf', chunks: calls } }));
+  };
+  try {
+    await runJobs('https://backend.example', 'customer_support', [{ file_hash: 'hash', status: 'pending' }], event => events.push(event));
+    assert.equal(calls, 2);
+    assert.equal(events.filter(event => event.type === 'done').length, 1);
+    assert.equal(events.at(-1).report.chunks, 2);
+  } finally { globalThis.fetch = original; }
+});
+
+test('cloud processing failure stops without reporting success', async () => {
+  const original = globalThis.fetch;
+  const events = [];
+  globalThis.fetch = async () => new Response(JSON.stringify({ detail: 'Set OCR_API_KEY, then resume.' }), { status: 400 });
+  try {
+    await assert.rejects(runJobs('https://backend.example', 'customer_support', [{ file_hash: 'hash', status: 'pending' }], event => events.push(event)), /OCR_API_KEY/);
+    assert.equal(events.length, 0);
   } finally { globalThis.fetch = original; }
 });
