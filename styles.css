@@ -204,6 +204,17 @@
   :is(.hero-actions .primary, #upload, #send)::before { display: none; }
 }
 /* Admin credentials remain in memory only; the backend protects every API route. */
+.nav-actions { display: flex; align-items: center; gap: 20px; }
+.admin-menu { position: relative; z-index: 10; }
+.admin-menu summary { display: flex; align-items: center; gap: 8px; padding: 12px 0; color: #dbe7ff; font-size: 13px; font-weight: 600; cursor: pointer; list-style: none; }
+.admin-menu summary::-webkit-details-marker { display: none; }
+.admin-menu summary:hover { color: #fff; }
+.admin-menu[open] .admin-chevron { transform: rotate(180deg); }
+.admin-dropdown { position: absolute; top: calc(100% + 8px); right: 0; min-width: 150px; padding: 6px; border: 1px solid #465b80; border-radius: 10px; background: #111e35; box-shadow: 0 12px 32px #0006; }
+.admin-dropdown button { width: 100%; padding: 11px 14px; border: 0; border-radius: 6px; background: transparent; color: #eef3ff; text-align: left; font-size: 13px; }
+.admin-dropdown button:hover, .admin-dropdown button:focus-visible { background: #ffffff0d; }
+@media (max-width: 760px) { .nav-actions { gap: 14px; } }
+@media (max-width: 430px) { .nav-actions .workspace-link { display: none; } }
 .login-gate { position: relative; z-index: 1; isolation: isolate; min-height: 100dvh; display: grid; place-items: center; padding: 24px; background: #050b1d; }
 .login-gate[hidden], #admin-app[hidden] { display: none !important; }
 .login-card { position: relative; width: min(100%, 420px); padding: 32px; border: 1px solid #465b80; border-radius: 20px; background: #111e35; color: #eef3ff; box-shadow: 0 24px 64px #0008; }

@@ -275,6 +275,17 @@ function showLogin() {
 }
 window.addEventListener('admin-login-required', showLogin);
 $('admin-logout').addEventListener('click', () => { clearCredentials(); location.reload(); });
+document.addEventListener('click', event => {
+  const menu = $('admin-menu');
+  if (!menu.contains(event.target)) menu.open = false;
+});
+document.addEventListener('keydown', event => {
+  const menu = $('admin-menu');
+  if (event.key === 'Escape' && menu.open) {
+    menu.open = false;
+    menu.querySelector('summary').focus();
+  }
+});
 $('login-connection').addEventListener('click', () => { $('api-url').value = base; $('settings').showModal(); });
 $('login-form').addEventListener('submit', async event => {
   event.preventDefault();
