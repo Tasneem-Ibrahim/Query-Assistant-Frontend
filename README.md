@@ -1,5 +1,11 @@
 # Query Assistant | Frontend
 
+Vercel deployment: use Framework Preset **Other**. The checked-in `vercel.json`
+runs `npm run build` and publishes `dist/` as static files. `server.mjs` is for
+local development only. Remove dashboard overrides that deploy it as a Node
+function. No frontend environment variables are required; set the backend
+origin in the website's Connection settings.
+
 Supabase-backed deployments support resumable PDF processing. Set the backend
 origin in Connection settings. Uploads are limited to 4 MB per PDF; use **Resume
 saved documents** after interrupted processing. Deploy this frontend together
