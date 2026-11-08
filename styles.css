@@ -210,6 +210,12 @@
 .login-card h1 { font-size: 28px; margin: 18px 0 10px; }
 .login-card p { color: #aab7cf; margin-bottom: 22px; }
 .login-card input { width: 100%; box-sizing: border-box; padding: 12px; margin: 8px 0 20px; border: 1px solid #3b4b6a; border-radius: 8px; background: #050b1d; color: #fff; font: inherit; }
+.password-field { position: relative; margin: 8px 0 20px; }
+.login-card .password-field input { margin: 0; padding-right: 52px; }
+.password-toggle { position: absolute; right: 2px; top: 2px; bottom: 2px; width: 44px; display: grid; place-items: center; padding: 0; border: 0; border-radius: 6px; background: transparent; color: #aab7cf; cursor: pointer; }
+.password-toggle:hover { color: #fff; background: #ffffff0d; }
+.password-toggle:focus-visible { outline: 2px solid #bdd5ff; outline-offset: 2px; }
+.eye-slash[hidden] { display: none; }
 .login-card #login-error { color: #ffb8b8; overflow-wrap: anywhere; }
 .login-card .text-link { margin-top: 18px; }
 .login-card .field-label { font-size: 11px; color: #c6d5ee; }

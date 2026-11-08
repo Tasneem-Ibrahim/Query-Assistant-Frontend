@@ -252,6 +252,17 @@ $('domain-form').addEventListener('submit', async event => {
 });
 function chooseFileAfterCreate(file) { state.file = file; $('selected-file').textContent = `${file.name} · ${(file.size / 1024 / 1024).toFixed(2)} MB`; }
 $('domain-name').addEventListener('input', () => $('domain-name').setCustomValidity(''));
+function setPasswordVisible(visible) {
+  $('admin-password').type = visible ? 'text' : 'password';
+  const button = $('toggle-password');
+  button.setAttribute('aria-pressed', String(visible));
+  button.setAttribute('aria-label', visible ? 'Hide password' : 'Show password');
+  button.title = visible ? 'Hide password' : 'Show password';
+  button.querySelector('.eye-slash').toggleAttribute('hidden', !visible);
+}
+$('toggle-password').addEventListener('click', () => {
+  setPasswordVisible($('admin-password').type === 'password');
+});
 function showLogin() {
   clearCredentials();
   state.online = false; state.status = null; state.domains = []; state.key = '';
@@ -259,6 +270,7 @@ function showLogin() {
   $('admin-app').hidden = true; $('admin-app').inert = true;
   $('login-gate').hidden = false;
   $('admin-password').value = '';
+  setPasswordVisible(false);
   controls(); renderMessages(); renderStatus();
 }
 window.addEventListener('admin-login-required', showLogin);
@@ -271,6 +283,7 @@ $('login-form').addEventListener('submit', async event => {
     setCredentials(base, $('admin-name').value.trim(), $('admin-password').value);
     await request(base, '/auth/session');
     $('admin-password').value = '';
+    setPasswordVisible(false);
     $('login-gate').hidden = true;
     $('admin-app').hidden = false; $('admin-app').inert = false;
     await connect();
