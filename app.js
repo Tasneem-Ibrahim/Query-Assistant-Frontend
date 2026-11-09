@@ -18,8 +18,9 @@ function controls() {
   const unavailable = !state.online || state.busy;
   for (const id of ['domain', 'bundled', 'refresh', 'reset', 'new-domain', 'rename-domain', 'delete-domain']) $(id).disabled = unavailable;
   $('delete-domain').disabled = unavailable || !state.domains.find(d => d.key === state.key)?.custom;
-  $('pdf').disabled = unavailable;
-  $('upload').disabled = unavailable || !state.file;
+  for (const id of ['pdf', 'bundled', 'refresh', 'reset', 'rename-domain']) $(id).disabled = unavailable || !state.key;
+  document.querySelectorAll('.view-image-text').forEach(button => { button.disabled = unavailable; });
+  $('upload').disabled = unavailable || !state.key || !state.file;
   $('question').disabled = unavailable || !state.status?.chunks;
   $('send').disabled = unavailable || !state.status?.chunks || !$('question').value.trim();
   $('clear').disabled = state.busy;
@@ -44,6 +45,11 @@ function sourceList(sources) {
 }
 function renderMessages() {
   const box = $('messages'); box.replaceChildren();
+  if (!state.key) {
+    const empty = node('div', 'chat-empty');
+    empty.append(node('h4', '', 'Select your knowledge base'), node('p', '', 'Choose a knowledge base from the dropdown to view your documents and start asking questions.'));
+    box.append(empty); return;
+  }
   const messages = state.mode === 'chat' ? history() : (state.results[state.key] || []);
   if (!messages.length) {
     const empty = node('div', 'chat-empty');
@@ -54,7 +60,7 @@ function renderMessages() {
       const examples = node('div', 'examples');
       for (const text of domain.examples) {
         const button = node('button', 'example'); button.type = 'button'; button.append(node('div', '', text), node('span', '', '↗'));
-        button.addEventListener('click', () => { $('question').value = text; controls(); if (!$('question').disabled) $('question').focus(); else notice('Process an uploaded PDF or use the bundled documents to get started.'); });
+        button.addEventListener('click', () => { $('question').value = text; controls(); if (!$('question').disabled) $('question').focus(); else notice('Process an uploaded PDF or image or use the bundled documents to get started.'); });
         examples.append(button);
       }
       empty.append(examples);
@@ -72,7 +78,7 @@ function renderMessages() {
 function renderStatus() {
   const files = Object.entries({ ...state.status?.files, ...state.status?.pending_files });
   $('file-count').textContent = files.length;
-  $('chunk-count').textContent = state.status ? `${state.status.chunks} searchable passages` : 'Status unavailable';
+  $('chunk-count').textContent = state.status ? `${state.status.chunks} searchable passages` : state.key ? 'Status unavailable' : 'No knowledge base selected';
   $('documents').replaceChildren();
   for (const [fileHash, file] of files) {
     const item = node('div', 'document'); const info = node('div', 'document-info');
@@ -83,34 +89,76 @@ function renderStatus() {
     remove.setAttribute('aria-label', `Delete ${file.name}`);
     remove.innerHTML = '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 6h18M9 6V4h6v2M5 6l1 14h12l1-14M10 10v6M14 10v6"/></svg>';
     remove.addEventListener('click', () => deleteDocument(fileHash, file.name));
-    item.append(node('span', 'mini-file', 'PDF'), info, remove); $('documents').append(item);
+    const isImage = /\.(jpe?g|png|jfif|webp|bmp|tiff?|avif)$/i.test(file.name);
+    if (isImage && !state.status?.pending_files?.[fileHash]) {
+      const view = node('button', 'view-image-text', 'View text');
+      view.type = 'button'; view.setAttribute('aria-label', `View extracted text from ${file.name}`);
+      view.addEventListener('click', () => showImageText(fileHash));
+      info.append(view);
+    }
+    item.append(node('span', 'mini-file', isImage ? 'IMG' : 'PDF'), info, remove); $('documents').append(item);
   }
-  if (!files.length) $('documents').append(node('p', 'empty-documents', 'No PDFs processed yet. Upload yours or try the bundled documents.'));
+  if (!files.length) $('documents').append(node('p', 'empty-documents', state.key ? 'No documents processed yet. Upload yours or try the bundled documents.' : 'Select your knowledge base to view its documents.'));
   controls();
 }
+let previewRequest = 0;
+function clearImageText() {
+  previewRequest++; $('ocr-preview').hidden = true; $('ocr-text').textContent = ''; $('ocr-filename').textContent = '';
+}
+async function showImageText(fileHash) {
+  const key = state.key; const generation = state.generation; const requestId = ++previewRequest;
+  $('ocr-preview').hidden = false; $('ocr-filename').textContent = ''; $('ocr-text').textContent = 'Loading extracted text...';
+  try {
+    const result = await json(`/domains/${encodeURIComponent(key)}/documents/${encodeURIComponent(fileHash)}/text`);
+    if (key !== state.key || generation !== state.generation || requestId !== previewRequest) return;
+    $('ocr-filename').textContent = result.name;
+    $('ocr-text').textContent = result.text || 'No readable text was found.';
+  } catch (e) {
+    if (key === state.key && generation === state.generation && requestId === previewRequest) $('ocr-text').textContent = e.message;
+  }
+}
+$('close-ocr-preview').addEventListener('click', clearImageText);
 async function refresh() {
+  if (!state.key) { state.status = null; renderStatus(); return; }
   const key = state.key;
   state.status = null; controls();
   try { const result = await json(`/domains/${encodeURIComponent(key)}/status`); if (key === state.key) state.status = result; }
   finally { renderStatus(); }
 }
 async function deleteDocument(fileHash, filename) {
-  if (state.busy || !state.online) return;
+  if (state.busy || !state.online || !state.key) return;
   if (!confirm(`Delete “${filename}” from this knowledge base? Its saved PDF and searchable passages will be removed. Other documents will stay unchanged.`)) return;
   const key = state.key;
   state.busy = true; controls();
   try {
     await request(base, `/domains/${encodeURIComponent(key)}/documents/${encodeURIComponent(fileHash)}`, { method: 'DELETE' });
     // Old answers may still quote the removed document.
-    delete state.histories[key]; delete state.results[key];
+    delete state.histories[key]; delete state.results[key]; clearImageText();
     renderMessages(); await refresh();
     notice(`“${filename}” and its searchable passages have been deleted.`);
   } catch (e) { notice(e.message); }
   finally { state.busy = false; controls(); }
 }
+function renderDomainOptions() {
+  const placeholder = node('option', '', 'Select your knowledge base');
+  placeholder.value = '';
+  $('domain').replaceChildren(placeholder, ...state.domains.map(d => {
+    const option = node('option', '', d.label); option.value = d.key; return option;
+  }));
+  $('domain').value = '';
+}
 async function selectDomain() {
+  clearImageText();
   state.key = $('domain').value; state.file = null; $('pdf').value = ''; $('selected-file').textContent = ''; $('question').value = ''; $('processing').hidden = true; notice();
   const domain = state.domains.find(d => d.key === state.key);
+  if (!domain) {
+    state.key = ''; state.status = null;
+    $('chat-title').textContent = 'Document assistant';
+    $('rename-domain').hidden = true; $('delete-domain').hidden = true;
+    $('assistant-description').textContent = 'Select your knowledge base to get started, or create a new one.';
+    $('bundled').textContent = state.cloud ? 'Resume saved documents' : 'Use bundled documents';
+    renderMessages(); renderStatus(); return;
+  }
   $('chat-title').textContent = domain.label;
   $('rename-domain').hidden = !domain.custom;
   $('delete-domain').hidden = !domain.custom;
@@ -120,6 +168,7 @@ async function selectDomain() {
   try { await refresh(); if (Object.keys(state.status?.pending_files || {}).length) notice('Some PDFs are incomplete. Click Resume saved documents to continue.'); else if (state.status && !state.status.chunks) notice(state.cloud || domain.custom ? 'Upload your first PDF to this knowledge base. You can add more PDFs on the same topic later.' : 'Add a PDF or use the bundled documents to start exploring.'); } catch (e) { notice(e.message); }
 }
 async function connect() {
+  clearImageText();
   const generation = ++state.generation;
   state.online = false; state.status = null; state.domains = []; state.key = ''; controls(); renderStatus(); renderMessages();
   try {
@@ -130,7 +179,7 @@ async function connect() {
     if (!Array.isArray(domains) || !domains.length) throw new Error('No assistants available from this backend.');
     state.cloud = health.storage === 'supabase';
     state.domains = domains; state.online = true;
-    $('domain').replaceChildren(...domains.map(d => { const option = node('option', '', d.label); option.value = d.key; return option; }));
+    renderDomainOptions();
     await selectDomain();
     if (!health.deepseek_key) notice('Backend connected. Set DEEPSEEK_API_KEY in the backend .env to generate answers. You can still process PDFs and search passages.');
   } catch (e) {
@@ -139,14 +188,17 @@ async function connect() {
   } finally { if (generation === state.generation) controls(); }
 }
 function chooseFile(file) {
-  if (!file || state.busy) return;
-  if (!file.name.toLowerCase().endsWith('.pdf')) { notice('Please choose a PDF file.'); return; }
-  if (!file.size) { notice('This PDF is empty. Choose a different file.'); return; }
-  if (state.cloud && file.size > 4000000) { notice('Choose a PDF smaller than 4 MB. Split larger PDFs into smaller files.'); return; }
+  if (!file || state.busy || !state.key) return;
+  if (! /\.(pdf|jpe?g|png|jfif|webp|bmp|tiff?|avif)$/i.test(file.name)) { notice('Please choose a PDF, JPG, JPEG, PNG, JFIF, WebP, BMP, TIF, TIFF or AVIF file.'); return; }
+  if (!file.size) { notice('This file is empty. Choose a different file.'); return; }
+  if (file.size > 4000000) { notice('Choose a PDF or image smaller than 4 MB.'); return; }
+  clearImageText();
   state.file = file; $('selected-file').textContent = `${file.name} · ${(file.size / 1024 / 1024).toFixed(2)} MB`; notice(); controls();
 }
 async function ingest(bundled) {
-  if (state.busy || !state.online) return;
+  if (state.busy || !state.online || !state.key) return;
+  const imageName = !bundled && /\.(jpe?g|png|jfif|webp|bmp|tiff?|avif)$/i.test(state.file?.name || '') ? state.file.name.replace(/[^A-Za-z0-9._-]+/g, '_') : null;
+  clearImageText();
   state.busy = true; controls(); notice(); $('processing').hidden = false; $('logs').textContent = 'Starting document processing…\n';
   const data = new FormData(); if (!bundled) data.append('file', state.file);
   data.append('force', $('force').checked); data.append('use_llm', $('use-llm').checked);
@@ -162,7 +214,14 @@ async function ingest(bundled) {
     } else await readEvents(response, onEvent);
     state.file = null; $('pdf').value = ''; $('selected-file').textContent = ''; notice('Your knowledge is ready. Ask a question or search the passages.');
   } catch (e) { notice(e.message); }
-  finally { try { await refresh(); } catch (e) { notice(e.message); } state.busy = false; controls(); }
+  finally {
+    try {
+      await refresh();
+      const image = imageName && Object.entries(state.status?.files || {}).find(([, file]) => file.name === imageName);
+      if (image) await showImageText(image[0]);
+    } catch (e) { notice(e.message); }
+    state.busy = false; controls();
+  }
 }
 async function submit(event) {
   event.preventDefault(); const question = $('question').value.trim();
@@ -205,7 +264,7 @@ $('delete-domain').addEventListener('click', async () => {
     await request(base, `/domains/${encodeURIComponent(domain.key)}`, { method: 'DELETE' });
     delete state.histories[domain.key]; delete state.results[domain.key];
     state.domains = state.domains.filter(d => d.key !== domain.key);
-    $('domain').replaceChildren(...state.domains.map(d => { const option = node('option', '', d.label); option.value = d.key; return option; }));
+    renderDomainOptions();
     await selectDomain();
     notice(`“${domain.label}” and its saved PDFs and vectors have been deleted.`);
   } catch (e) { notice(e.message); }
@@ -222,7 +281,7 @@ $('api-url').addEventListener('input', () => $('api-url').setCustomValidity(''))
 let editingDomain = null;
 function openDomainDialog(rename) {
   editingDomain = rename ? state.key : null;
-  $('domain-name').value = rename ? state.domains.find(d => d.key === state.key).label : state.file?.name.replace(/\.pdf$/i, '') || '';
+  $('domain-name').value = rename ? state.domains.find(d => d.key === state.key).label : state.file?.name.replace(/\.(pdf|jpe?g|png|jfif|webp|bmp|tiff?|avif)$/i, '') || '';
   $('domain-dialog-title').textContent = rename ? 'Rename knowledge base' : 'New knowledge base';
   $('save-domain').textContent = rename ? 'Save name ↗' : 'Create knowledge base ↗';
   $('domain-help').textContent = rename ? 'Update the name. Your documents and conversations stay saved.' : 'Name your topic, then add related PDFs. It stays saved in the dropdown.';
@@ -241,7 +300,7 @@ $('domain-form').addEventListener('submit', async event => {
   try {
     const domain = await (await request(base, rename ? `/domains/${encodeURIComponent(editingDomain)}` : '/domains', { method: rename ? 'PATCH' : 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ name }) })).json();
     if (rename) state.domains = state.domains.map(d => d.key === domain.key ? domain : d); else state.domains.push(domain);
-    $('domain').replaceChildren(...state.domains.map(d => { const option = node('option', '', d.label); option.value = d.key; return option; }));
+    renderDomainOptions();
     $('domain').value = domain.key;
     await selectDomain();
     if (retainedFile) chooseFileAfterCreate(retainedFile);

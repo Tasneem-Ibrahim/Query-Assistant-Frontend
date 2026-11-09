@@ -83,6 +83,22 @@ test('delete on an older backend explains that restart is needed', async () => {
   } finally { globalThis.fetch = original; }
 });
 
+test('image preview on an older backend explains that restart is needed', async () => {
+  const original = globalThis.fetch;
+  globalThis.fetch = async () => new Response(JSON.stringify({ detail: 'Not Found' }), { status: 404 });
+  try {
+    await assert.rejects(request('http://localhost:8000', '/domains/example/documents/hash/text'), /Restart the backend.*View text/);
+  } finally { globalThis.fetch = original; }
+});
+
+test('image preview retains a specific missing-document error', async () => {
+  const original = globalThis.fetch;
+  globalThis.fetch = async () => new Response(JSON.stringify({ detail: 'Document not found in this knowledge base.' }), { status: 404 });
+  try {
+    await assert.rejects(request('http://localhost:8000', '/domains/example/documents/hash/text'), /Document not found in this knowledge base/);
+  } finally { globalThis.fetch = original; }
+});
+
 test('cloud processing continues page jobs until ready and emits one completion', async () => {
   const original = globalThis.fetch;
   const events = [];

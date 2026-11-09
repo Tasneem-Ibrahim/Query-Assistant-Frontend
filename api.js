@@ -42,6 +42,9 @@ export async function request(base, path, options = {}) {
       throw new Error('Deletion is not available in the running backend. Restart api_server.py, refresh this page, and try again. Nothing was deleted.');
     }
     const body = await response.json().catch(() => ({}));
+    if (response.status === 404 && body.detail === 'Not Found' && /\/documents\/[^/]+\/text$/.test(path)) {
+      throw new Error('The running backend has not loaded the extracted-text feature. Restart the backend (api_server:app), refresh this page, and click View text again. For a live website, deploy the updated backend.');
+    }
     throw new Error(typeof body.detail === 'string' ? body.detail : `Request failed (${response.status}).`);
   }
   return response;

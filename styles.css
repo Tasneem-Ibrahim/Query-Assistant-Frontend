@@ -233,3 +233,13 @@
 .login-card .field-label { font-size: 11px; color: #c6d5ee; }
 .login-card h1 { color: #f3f6ff; letter-spacing: -1px; }
 .login-card #login-connection { background: transparent; border: 0; padding: 8px 0; color: #bdd5ff; }
+
+.ocr-preview { margin-top: 18px; padding: 14px; border: 1px solid #edc98b55; border-radius: 12px; min-width: 0; background: #edc98b08; }
+.ocr-preview[hidden] { display: none; }
+.ocr-preview h3 { font-size: 15px; }
+.ocr-source-label { display: inline-block; color: #edc98b; font-size: 10px; font-weight: 700; letter-spacing: 1px; margin-top: 6px; }
+.ocr-preview pre { white-space: pre-wrap; overflow-wrap: anywhere; max-height: 300px; overflow-y: auto; font: inherit; font-size: 14px; font-weight: 500; line-height: 1.8; user-select: text; padding: 14px; margin: 10px 0; background: #edc98b17; color: #c2ad86; border-left: 3px solid #edc98b; border-radius: 4px 8px 8px 4px; }
+.ocr-preview pre::selection { background: #edc98b; color: #101827; }
+.ocr-hint { font-size: 11px; opacity: .65; margin-bottom: 0; }
+.view-image-text { display: block; margin-top: 5px; border: 0; padding: 0; background: transparent; color: inherit; font: inherit; font-size: 12px; text-decoration: underline; cursor: pointer; }
+.view-image-text:disabled { opacity: .5; cursor: default; }

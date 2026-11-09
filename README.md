@@ -1,149 +1,227 @@
 # Query Assistant | Frontend
 
-Vercel deployment: use Framework Preset **Other**. The checked-in `vercel.json`
-runs `npm run build` and publishes `dist/` as static files. `server.mjs` is for
-local development only. Remove dashboard overrides that deploy it as a Node
-function. Set `BACKEND_URL` in the frontend Vercel project to the backend HTTPS
-origin, such as `https://your-backend.vercel.app`, then redeploy. The build exposes
-only this public URL in `config.js`. Browser Connection settings can override it.
-Set `CORS_ORIGINS` in the backend project to your frontend's exact HTTPS origin
-and redeploy that project too. Keep all provider API keys on the backend.
+Query Assistant provides a <span style="color: #8ecbff;"><strong>browser workspace</strong></span> where users can turn their <span style="color: #8ecbff;"><strong>PDFs and images</strong></span> into a collection they can search and ask questions about. Users select or create a <span style="color: #8ecbff;"><strong>knowledge base</strong></span>, upload related files, inspect <span style="color: #8ecbff;"><strong>text recognized from images</strong></span> and receive answers with supporting <span style="color: #8ecbff;"><strong>document excerpts and page references</strong></span>. The interface can help <span style="color: #8ecbff;"><strong>students</strong></span> revise notes, <span style="color: #8ecbff;"><strong>support staff</strong></span> find policy details, <span style="color: #8ecbff;"><strong>researchers</strong></span> explore reports and users review information across multiple documents. It brings uploading, <span style="color: #8ecbff;"><strong>OCR review</strong></span>, <span style="color: #8ecbff;"><strong>passage search</strong></span> and <span style="color: #8ecbff;"><strong>document chat</strong></span> into one place, making stored information easier to access without repeatedly reading every file from beginning to end.
 
-Supabase-backed deployments support resumable PDF processing. Set the backend
-origin in Connection settings. Uploads are limited to 4 MB per PDF; use **Resume
-saved documents** after interrupted processing. Deploy this frontend together
-with the updated backend; credentials remain on the backend.
+**A document workspace for uploading PDFs and images, inspecting OCR text and asking questions with cited answers.**
 
-A responsive document intelligence workspace for uploading PDFs, searching passages, and asking questions with source citations.
+Built with HTML, CSS and native JavaScript modules. The browser talks to the [FastAPI backend](../Query-Assistant-backend/README.md); models and provider credentials remain on the backend.
 
-Built with HTML, CSS, and native JavaScript modules. A lightweight Node.js server supports local development; no frontend dependencies or build step are required.
+## Workspace features
 
-## Features
+| Feature | Behavior |
+| --- | --- |
+| Admin login | Backend verifies credentials; tab-scoped login can resume after refresh |
+| Initial state | Every load/refresh shows **Select your knowledge base**, without automatically selecting Customer Support |
+| Built-in assistants | Customer Support and Legal Assistant personas |
+| Custom knowledge bases | Create, select, rename and delete named document collections |
+| Upload | Drag/drop or browse PDFs and images with format/size validation |
+| Processing | Local activity stream or resumable cloud page jobs |
+| OCR transparency | Raw image text automatically opens in a soft golden panel labelled **EXTRACTED FROM IMAGE** |
+| Saved image preview | **View text** reopens OCR text with filename; text can be selected/copied |
+| Chat | Follow-up questions and answers with expandable document/page sources |
+| Passage search | Relevant excerpts without generating an LLM answer |
+| Document management | Page/passage counts, ready/pending state and document deletion |
+| Visual design | Responsive dark blue/gold theme, keyboard controls and reduced-motion support |
 
-- Animated hero, custom light-streak logo, and blue-and-gold visual theme.
-- Glass buttons, responsive layouts, keyboard interactions, and reduced-motion support.
-- Customer Support and Legal Assistant workspaces.
-- Custom knowledge bases with user-defined names and rename support.
-- PDF upload with drag and drop and live processing logs.
-- Document counts, page totals, and indexed-passage status.
-- Document chat with follow-up context and expandable page citations.
-- Passage search without generating an AI answer.
-- English interface; answers follow English or Roman Urdu questions.
+Upload and document actions stay disabled until a base is selected. Questions require indexed passages. **+ New knowledge base** remains available after connecting, even without a selection.
 
-## Requirements
+## Architecture
 
-- Node.js 20 or later.
-- A running Query Assistant backend using `api_server.py`.
-- A modern browser with JavaScript enabled.
+```mermaid
+flowchart TB
+    User[User] --> Login[Admin login]
+    Login --> Select[Select a knowledge base]
+    Select --> Upload[Upload PDF or image]
+    Upload --> API[Authenticated FastAPI backend]
+    API --> Extract[PDF extraction / OCR]
+    Extract --> Preview[Raw image text: golden preview]
+    Preview --> UI[Browser workspace]
+    Extract --> Index[Clean → chunk → embed]
+    Index --> Qdrant[(Qdrant)]
+    API --> Supabase[(Supabase files, metadata and jobs)]
+    Select --> Question[Ask question / search passages]
+    Question --> API
+    Qdrant --> Context[Relevant source passages]
+    Context --> DeepSeek[DeepSeek answer generation]
+    DeepSeek --> Sources[Answer + page citations]
+    Sources --> UI
+```
+
+See the [backend architecture](../Query-Assistant-backend/README.md#architecture-and-data-flow) for detailed ingestion and question flows. Passage search returns retrieved excerpts directly; answer generation is used for chat.
+
+## Models and services behind the interface
+
+Model selections below reflect the inspected development backend configuration on **9 November 2026**, not necessarily a separately deployed environment.
+
+| User action | Model / component | Task | Executes where |
+| --- | --- | --- | --- |
+| Upload image/scan | Tesseract OCR in current host setup | Recognize printed text; preserve raw preview | Backend host |
+| Upload digital PDF | PyMuPDF | Read text layer and inspect images | Backend |
+| Enable LLM normalization | DeepSeek `deepseek-chat` | Merge/organize extracted content; rule-based fallback exists | DeepSeek API through backend |
+| Index document | OpenRouter `nvidia/nemotron-3-embed-1b:free` | Create current configured 2048-dimensional passage embeddings | Embedding API through backend |
+| Ask/search | Same embedding model + Qdrant | Embed query and retrieve passages from selected collection | Backend/services |
+| Ask follow-up | DeepSeek `deepseek-chat` | Resolve context into standalone search query | DeepSeek API through backend |
+| Generate answer | DeepSeek `deepseek-chat` | Answer from retrieved excerpts with sources | DeepSeek API through backend |
+| Save files/progress | Supabase | Private documents, names and processing jobs | Backend → Supabase |
+| Open saved image text | Backend preview storage | Read saved raw OCR without requesting a new answer | Backend → browser |
+
+Backend alternatives include local `intfloat/multilingual-e5-small` embeddings and hosted Mistral-compatible `mistral-ocr-latest` OCR. These are alternatives, not extra models called for every action. No browser ML model runs in this frontend. See the [full model table](../Query-Assistant-backend/README.md#models-and-responsibilities).
+
+## API keys and configuration ownership
+
+| Variable / credential | Where configured | Purpose | Browser exposure |
+| --- | --- | --- | --- |
+| `BACKEND_URL` | Frontend build environment | Public backend origin in built `config.js` | Public; not an API key |
+| `PORT` | Local frontend process | Development server port, default `3000` | Not a secret |
+| `ADMIN_USERNAME` / `ADMIN_PASSWORD` | Backend; entered by admin at login | Authenticate application requests | Sent with authenticated requests; tab session in `sessionStorage`, never built into assets |
+| `DEEPSEEK_API_KEY` | Backend only | Cleanup, follow-up rewrite and answers | Never in frontend configuration |
+| `EMBEDDING_API_KEY` | Backend only | Embeddings; currently OpenRouter | Never in frontend configuration |
+| `SUPABASE_SERVICE_ROLE_KEY` | Backend only | Private files, metadata and job RPCs | Never in frontend configuration |
+| `QDRANT_API_KEY` | Backend only | Remote vector storage/search | Never in frontend configuration |
+| `OCR_API_KEY` | Backend only, for hosted OCR | Remote OCR alternative | Never in frontend configuration |
+| `CORS_ORIGINS` | Backend environment | Allow exact frontend origin | Not a secret; does not replace authentication |
+
+Tesseract needs no provider API key. The browser does not directly use Supabase/Qdrant SDKs: it accesses those services through the authenticated backend. No actual secret key values belong in either README.
+
+## Supported uploads
+
+| Type | Extensions | Behavior |
+| --- | --- | --- |
+| PDF | `.pdf` | Digital text extraction and image/scanned-content OCR |
+| JPEG / JFIF | `.jpg`, `.jpeg`, `.jfif` | Decode and OCR |
+| PNG | `.png` | Decode, flatten transparency onto white and OCR |
+| WebP | `.webp` | Decode and OCR |
+| Bitmap | `.bmp` | Decode and OCR |
+| TIFF | `.tif`, `.tiff` | Process every page |
+| AVIF | `.avif` | Decode and OCR with backend Pillow support |
+
+Limit: **4,000,000 bytes per file**. Backend validation checks actual readability and decoded size. Animated PNG/WebP/AVIF use their first frame. A supported format does not guarantee readable text; OCR depends on image quality and text content.
 
 ## Quick start
 
-From this project's directory:
+Requirements: Node.js **20+**, a modern browser and matching backend running as **`api_server:app`**.
+
+Start the backend separately using its [setup guide](../Query-Assistant-backend/README.md#setup-and-runtime-modes). From the frontend directory:
 
 ```powershell
 npm.cmd run dev
 ```
 
-Open **http://localhost:3000**. On macOS or Linux, use `npm run dev`. Windows commands use `npm.cmd` to avoid PowerShell script-policy errors.
+Open **http://localhost:3000**. On macOS/Linux use `npm run dev`. Windows uses `npm.cmd` to avoid PowerShell script-policy errors. No third-party npm packages or `npm install` are needed by the current implementation.
 
-No `npm install` is needed. Keep the terminal running while using the local website.
+The local server serves source files directly. Production uses static output from `npm.cmd run build`.
 
-Start the backend in a separate terminal, following its [setup guide](../ocr-backend/README.md). The default API address is **http://localhost:8000**.
+## Demo walkthrough
 
-## Using the workspace
+1. Sign in with backend admin credentials.
+2. The dropdown shows **Select your knowledge base**; select a base or create one.
+3. Browse/drop a supported file and click **Upload & process**.
+4. Watch logs; use **Resume saved documents** for interrupted Supabase jobs.
+5. Inspect an image's golden OCR preview; reopen it later with **View text**.
+6. Ask a question or select **Search passages**.
+7. Expand sources to inspect filenames, pages and excerpts.
+8. Refresh: login may resume in this tab, but base selection starts empty. Select the saved base to continue.
 
-1. Select an assistant from the dropdown.
-2. Click **Use bundled documents**, or choose a PDF and click **Upload & process**.
-3. Wait until processing completes and searchable passages appear.
-4. Ask a question, or switch to **Search passages**.
-5. Expand supporting sources to inspect document names, page numbers, and excerpts.
+Multiple related documents can belong to a base. Retrieval uses only its collection. Rename preserves content; document deletion removes its vectors and saved preview. Local reset keeps source files; cloud reset is disabled in favor of individual deletion/re-upload.
 
-For a new topic, click **+ New knowledge base**, enter a name, and upload related PDFs. Multiple PDFs can belong to the same knowledge base. Search and answers use only the selected knowledge base.
+## Browser state and processing settings
 
-Custom names remain saved on the backend across reloads and restarts. **Rename** changes the display name without changing documents or indexed content. **Process saved documents** processes previously uploaded PDFs again, subject to the backend's duplicate checks.
-
-**Reset this knowledge base** clears its indexed content and processing registry while keeping uploaded PDFs and the dropdown entry. **Clear conversation** clears the active chat or search view only.
-
-## Configuration
-
-Open **Processing settings > Connection settings** to change the backend URL. Enter the server origin, such as `https://api.example.com`, without `/api`. The browser remembers this setting locally.
-
-| Setting | Behavior |
+| State / setting | Location or behavior |
 | --- | --- |
-| API URL | Defaults to `http://localhost:8000` |
-| Use LLM normalization | Requests model-assisted PDF cleanup |
-| Reprocess existing PDF | Requests forced ingestion |
-| Retrieved passages | Selects 1-20 passages for chat or search |
-| Local server port | Set `PORT` before running the development server |
+| Selected knowledge base | Page memory; intentionally empty after reload |
+| Chat/search conversation | Page memory; cleared on reload |
+| Admin login | Backend-scoped credentials in memory and tab `sessionStorage`; logout clears session |
+| Backend URL override | Browser `localStorage`, key `pagewise-api` |
+| Documents, vectors and base names | Persisted by backend, independent of page refresh |
+| Use LLM normalization | Optional model-assisted backend cleanup |
+| Reprocess existing PDF | Local forced ingestion; disabled for cloud jobs |
+| Retrieved passages | `1–20`, default `5` |
+| Clear conversation | Clear active view, not stored documents |
 
-Chat history is stored in browser memory and is cleared on page reload. Documents, vectors, and knowledge-base names are stored by the backend. Keep provider API keys on the backend; this static frontend does not read `.env` files.
+**Processing settings → Connection settings** accepts the backend origin, such as `http://localhost:8000` or `https://your-backend.vercel.app`; an optional trailing `/api` is normalized.
+
+Connection priority: saved override → build-time `BACKEND_URL` → local `http://localhost:8000` or hosted same origin. Credentials are scoped to that backend. This static app does not load backend `.env` files.
+
+## Backend integration
+
+| Operation | Endpoint | Handling |
+| --- | --- | --- |
+| Login/resume | `GET /api/auth/session` | Verify credentials |
+| Load bases | `GET /api/domains` | Populate dropdown with empty placeholder first |
+| Status | `GET /api/domains/{key}/status` | Display ready/pending files and passages |
+| Upload | `POST /api/domains/{key}/ingest` | Multipart file and options |
+| Local processing | Same upload endpoint | Parse NDJSON `log`, `done`, `error` |
+| Cloud processing | `POST /api/domains/{key}/documents/{hash}/step` | Continue jobs until `ready` |
+| Image preview | `GET /api/domains/{key}/documents/{hash}/text` | Render raw OCR safely as text |
+| Chat | `POST /api/domains/{key}/ask` | Answer and sources |
+| Passage search | `POST /api/domains/{key}/search` | Excerpts without answer generation |
+| Delete document | `DELETE /api/domains/{key}/documents/{hash}` | Confirm, delete, refresh |
+
+See the [complete API reference](../Query-Assistant-backend/README.md#api-reference) for create/rename/delete/reset contracts. Health/docs also require authentication; HTTP 401 returns the browser to login.
 
 ## Project structure
 
 ```text
-ocr-frontend/
-|-- assets/
-|   |-- background-ocr.png
-|   `-- Query-Assistant-logo.png
-|-- tests/api.test.mjs
-|-- index.html             # Page structure and dialogs
-|-- styles.css             # Layout, typography, and animations
-|-- app.js                 # Workspace state and interactions
-|-- api.js                 # HTTP requests and ingestion stream parsing
-|-- server.mjs             # Local static server
-|-- package.json           # Development and verification commands
-`-- .gitignore
+Query-Assistant-frontend/
+├── assets/          # Logo and visual assets
+├── index.html       # Workspace, login, dialogs and OCR panel
+├── styles.css       # Dark theme and soft golden OCR text
+├── app.js           # Selection, uploads, preview, chat and interactions
+├── api.js           # Credentials, HTTP, streams and cloud jobs
+├── config.js        # Development public backend configuration
+├── build.mjs        # Generate dist/ and public config
+├── server.mjs       # Local static development server
+├── vercel.json      # Static deployment settings
+├── tests/           # API/session/stream regression checks
+└── package.json     # Development, build and verification commands
 ```
-
-## Backend integration
-
-The frontend targets **`api_server.py`**. The older backend `api.py` uses a different contract.
-
-All routes are prefixed with `/api`. Ingestion returns newline-delimited JSON with `log`, `done`, or `error` events. Chat and search return structured sources, rendered as text rather than inserted as HTML.
-
-See the [backend API reference](../ocr-backend/README.md#api-reference) for endpoint details.
 
 ## Verification
 
 ```powershell
 npm.cmd run check
 npm.cmd test
+npm.cmd run build
 ```
 
-Syntax checks cover the JavaScript modules and local server. Tests cover ingestion-stream boundaries, backend errors, incomplete streams, and HTTP error handling. They do not exercise a live embedding model or browser layout.
+Syntax checks cover modules/scripts. Tests cover backend-scoped sessions, stream boundaries, failed/incomplete ingestion, HTTP errors and cloud job continuation. They do not establish browser layout or live provider availability.
+
+Manual UI checks: refresh with empty base selection → choose base → upload image → inspect golden text → ask/inspect sources → reopen saved text → logout.
 
 ## Deployment
 
-This is a static website. For Vercel, import the GitHub repository and configure:
+The checked-in `vercel.json` defines a **static deployment**:
 
 | Setting | Value |
 | --- | --- |
-| Root directory | `ocr-frontend` for a combined repository; repository root for a frontend-only repository |
 | Framework preset | Other |
-| Build command | Empty |
-| Output directory | `.` |
+| Root directory | `Query-Assistant-frontend` for combined workspace; repository root for frontend-only repository |
+| Build command | `npm run build` |
+| Output directory | `dist` |
+| Frontend environment | `BACKEND_URL=https://your-backend.vercel.app` |
+| Backend environment | Exact frontend origin in `CORS_ORIGINS`; credentials/providers configured separately |
 
-Vercel can serve HTML, CSS, and JavaScript without a build step. See [Vercel build configuration](https://vercel.com/docs/builds/configure-a-build).
+`server.mjs` is local development tooling, not a Vercel serverless entry point. Build exposes only the public backend URL in `dist/config.js`. Deploy matching backend code too: frontend deployment cannot add API routes. Without `BACKEND_URL`, hosted builds use their own origin and need a same-origin API/proxy.
 
-Deploy the Python backend separately with persistent storage. Set its public HTTPS URL in connection settings and add the frontend's exact origin to the backend CORS allowlist. For a shared default, set the frontend build environment variable `BACKEND_URL` before deploying. Without it, hosted builds request `/api` on their own origin, requiring a same-origin backend or proxy. Local development defaults to `http://localhost:8000`. The local Node server is not the production runtime on Vercel.
+Live Tesseract OCR needs its executable and Python dependencies installed on the backend host. Otherwise select hosted OCR. See [backend deployment instructions](../Query-Assistant-backend/DEPLOY_VERCEL.md).
 
 ## Troubleshooting
 
-| Problem | Action |
+| Symptom | Action |
 | --- | --- |
-| Backend unavailable | Start `api_server.py`, check its URL, and verify `/api/health`. |
-| Browser blocks requests | Add the frontend origin to backend CORS settings; use HTTPS for a hosted backend. |
-| Question box is disabled | Process a PDF and wait for searchable passages to appear. |
-| Processing appears slow | Check the live logs and backend terminal; the first ingestion may download the embedding model. |
-| Answers fail but search works | Configure `DEEPSEEK_API_KEY` on the backend. |
-| Styling looks outdated | Refresh with Ctrl + F5. |
+| Empty selection after refresh | Expected; select a base. Saved documents remain stored |
+| Upload disabled | Select a knowledge base |
+| Question box disabled | Select a base with indexed passages or finish an upload |
+| Preview route not found | Restart/deploy matching updated `api_server:app` |
+| Cloud document incomplete | Resolve backend error; **Resume saved documents** |
+| Search works, answers fail | Check backend DeepSeek configuration/quota |
+| Backend unreachable / requests blocked | Check origin, HTTPS, server and CORS |
+| Wrong backend after deployment | Inspect Connection settings override and `BACKEND_URL` |
+| Old styling visible | Refresh with **Ctrl+F5** |
+| Login fails | Check admin credentials; provider API keys are not login credentials |
 
-Google Fonts are optional; the interface falls back to system fonts. Public backend access control is handled outside this frontend.
-# Admin login
+## Presentation summary
 
-Deploy the matching protected backend with `ADMIN_USERNAME` and `ADMIN_PASSWORD`
-set in its environment. Sign in on the frontend with these credentials. Every
-API operation requires backend verification, including paid calls and deletion.
-Credentials remain in browser memory only; refreshing or signing out clears them.
-Do not configure the admin password in this static frontend or its build variables.
+> The frontend is the user's control panel. It sends authenticated files and questions to the backend, displays progress and original OCR text, and presents answers with supporting document sources. AI models and provider credentials stay on the backend.
 
+Presentation sequence: **blank selection → choose/create base → image upload → OCR highlight → question → cited answer → refresh → saved document preview**.
