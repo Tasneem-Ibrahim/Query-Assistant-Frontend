@@ -19,7 +19,7 @@ function controls() {
   for (const id of ['domain', 'bundled', 'refresh', 'reset', 'new-domain', 'rename-domain', 'delete-domain']) $(id).disabled = unavailable;
   $('delete-domain').disabled = unavailable || !state.domains.find(d => d.key === state.key)?.custom;
   for (const id of ['pdf', 'bundled', 'refresh', 'reset', 'rename-domain']) $(id).disabled = unavailable || !state.key;
-  document.querySelectorAll('.view-image-text').forEach(button => { button.disabled = unavailable; });
+  document.querySelectorAll('.view-image-text, .view-pdf').forEach(button => { button.disabled = unavailable; });
   $('upload').disabled = unavailable || !state.key || !state.file;
   $('question').disabled = unavailable || !state.status?.chunks;
   $('send').disabled = unavailable || !state.status?.chunks || !$('question').value.trim();
@@ -96,10 +96,88 @@ function renderStatus() {
       view.addEventListener('click', () => showImageText(fileHash));
       info.append(view);
     }
+    if (/\.pdf$/i.test(file.name)) {
+      const view = node('button', 'view-pdf', 'View PDF');
+      view.type = 'button'; view.setAttribute('aria-label', `View PDF ${file.name}`);
+      view.addEventListener('click', () => openPdf(fileHash, file.name));
+      info.append(view);
+    }
     item.append(node('span', 'mini-file', isImage ? 'IMG' : 'PDF'), info, remove); $('documents').append(item);
   }
   if (!files.length) $('documents').append(node('p', 'empty-documents', state.key ? 'No documents processed yet. Upload yours or try the bundled documents.' : 'Select your knowledge base to view its documents.'));
   controls();
+}
+const pdfTabs = new Map();
+let activePdf = null;
+function activatePdf(fileHash = null) {
+  activePdf = fileHash;
+  for (const [hash, tab] of pdfTabs) {
+    tab.panel.hidden = hash !== fileHash;
+    tab.button.classList.toggle('active', hash === fileHash);
+    tab.button.setAttribute('aria-pressed', String(hash === fileHash));
+  }
+  for (const mode of ['chat', 'search']) {
+    const active = !fileHash && state.mode === mode;
+    $(`${mode}-mode`).classList.toggle('active', active);
+    $(`${mode}-mode`).setAttribute('aria-pressed', String(active));
+  }
+  $('pdf-panels').hidden = !fileHash;
+  $('messages').hidden = Boolean(fileHash);
+  document.querySelector('.composer-wrap').hidden = Boolean(fileHash);
+  $('clear').hidden = Boolean(fileHash);
+}
+function closePdf(fileHash) {
+  const tab = pdfTabs.get(fileHash);
+  if (!tab) return;
+  tab.controller.abort();
+  tab.panel.remove(); tab.wrapper.remove();
+  if (tab.url) URL.revokeObjectURL(tab.url);
+  pdfTabs.delete(fileHash);
+  if (activePdf === fileHash) {
+    const next = [...pdfTabs.keys()].at(-1) || null;
+    activatePdf(next);
+    (next ? pdfTabs.get(next).button : $(`${state.mode}-mode`)).focus();
+  }
+}
+function clearPdfTabs() {
+  for (const hash of [...pdfTabs.keys()]) closePdf(hash);
+  activatePdf();
+}
+async function openPdf(fileHash, filename) {
+  if (pdfTabs.has(fileHash)) { activatePdf(fileHash); return; }
+  const key = state.key;
+  const wrapper = node('div', 'pdf-tab');
+  const button = node('button', '', filename);
+  button.type = 'button'; button.title = filename;
+  button.addEventListener('click', () => activatePdf(fileHash));
+  const close = node('button', 'pdf-tab-close', '\u00d7');
+  close.type = 'button'; close.title = `Close ${filename}`;
+  close.setAttribute('aria-label', `Close PDF ${filename}`);
+  close.addEventListener('click', () => closePdf(fileHash));
+  wrapper.append(button, close); document.querySelector('.chat-tabs').append(wrapper);
+  const panel = node('section', 'pdf-panel');
+  panel.setAttribute('aria-label', `PDF preview: ${filename}`);
+  const status = node('p', 'pdf-status', 'Loading PDF...'); status.setAttribute('role', 'status');
+  panel.append(status); $('pdf-panels').append(panel);
+  const tab = { wrapper, button, panel, controller: new AbortController(), url: null };
+  pdfTabs.set(fileHash, tab); activatePdf(fileHash);
+  try {
+    const response = await request(base, `/domains/${encodeURIComponent(key)}/documents/${encodeURIComponent(fileHash)}/pdf`, { signal: tab.controller.signal });
+    const blob = await response.blob();
+    if (pdfTabs.get(fileHash) !== tab) return;
+    tab.url = URL.createObjectURL(new Blob([blob], { type: 'application/pdf' }));
+    const frame = node('iframe', 'pdf-frame'); frame.title = filename; frame.src = tab.url;
+    const fallback = node('a', 'pdf-fallback', 'Open PDF in a new tab');
+    fallback.href = tab.url; fallback.target = '_blank'; fallback.rel = 'noopener';
+    panel.replaceChildren(fallback, frame);
+  } catch (error) {
+    if (pdfTabs.get(fileHash) === tab) {
+      status.textContent = error.message;
+      const retry = node('button', 'button secondary', 'Retry');
+      retry.type = 'button'; retry.addEventListener('click', () => { closePdf(fileHash); openPdf(fileHash, filename); });
+      panel.append(retry);
+    }
+  }
 }
 let previewRequest = 0;
 function clearImageText() {
@@ -132,6 +210,7 @@ async function deleteDocument(fileHash, filename) {
   state.busy = true; controls();
   try {
     await request(base, `/domains/${encodeURIComponent(key)}/documents/${encodeURIComponent(fileHash)}`, { method: 'DELETE' });
+    closePdf(fileHash);
     // Old answers may still quote the removed document.
     delete state.histories[key]; delete state.results[key]; clearImageText();
     renderMessages(); await refresh();
@@ -148,6 +227,7 @@ function renderDomainOptions() {
   $('domain').value = '';
 }
 async function selectDomain() {
+  clearPdfTabs();
   clearImageText();
   state.key = $('domain').value; state.file = null; $('pdf').value = ''; $('selected-file').textContent = ''; $('question').value = ''; $('processing').hidden = true; notice();
   const domain = state.domains.find(d => d.key === state.key);
@@ -168,6 +248,7 @@ async function selectDomain() {
   try { await refresh(); if (Object.keys(state.status?.pending_files || {}).length) notice('Some PDFs are incomplete. Click Resume saved documents to continue.'); else if (state.status && !state.status.chunks) notice(state.cloud || domain.custom ? 'Upload your first PDF to this knowledge base. You can add more PDFs on the same topic later.' : 'Add a PDF or use the bundled documents to start exploring.'); } catch (e) { notice(e.message); }
 }
 async function connect() {
+  clearPdfTabs();
   clearImageText();
   const generation = ++state.generation;
   state.online = false; state.status = null; state.domains = []; state.key = ''; controls(); renderStatus(); renderMessages();
@@ -247,13 +328,13 @@ $('upload').addEventListener('click', () => ingest(false)); $('bundled').addEven
 $('question-form').addEventListener('submit', submit);
 $('question').addEventListener('input', () => { $('question').style.height = 'auto'; $('question').style.height = `${Math.min($('question').scrollHeight, 130)}px`; controls(); });
 $('question').addEventListener('keydown', event => { if (event.key === 'Enter' && !event.shiftKey && !event.isComposing) { event.preventDefault(); $('question-form').requestSubmit(); } });
-for (const mode of ['chat', 'search']) $(`${mode}-mode`).addEventListener('click', () => { state.mode = mode; for (const name of ['chat', 'search']) { $(`${name}-mode`).classList.toggle('active', name === mode); $(`${name}-mode`).setAttribute('aria-pressed', String(name === mode)); } $('question').placeholder = mode === 'chat' ? 'What would you like to know?' : 'Search for a clause, topic, or passage…'; notice(); renderMessages(); });
+for (const mode of ['chat', 'search']) $(`${mode}-mode`).addEventListener('click', () => { state.mode = mode; activatePdf(); for (const name of ['chat', 'search']) { $(`${name}-mode`).classList.toggle('active', name === mode); $(`${name}-mode`).setAttribute('aria-pressed', String(name === mode)); } $('question').placeholder = mode === 'chat' ? 'What would you like to know?' : 'Search for a clause, topic, or passage…'; notice(); renderMessages(); });
 $('clear').addEventListener('click', () => { if (state.mode === 'chat') state.histories[state.key] = []; else state.results[state.key] = []; renderMessages(); notice(); });
 $('refresh').addEventListener('click', async () => { state.busy = true; controls(); try { await refresh(); notice(); } catch (e) { notice(e.message); } finally { state.busy = false; controls(); } });
 $('reset').addEventListener('click', async () => {
   if (!confirm('Reset this assistant’s knowledge base? This removes its searchable passages and processing registry. The PDF files are kept.')) return;
   state.busy = true; controls();
-  try { await json(`/domains/${encodeURIComponent(state.key)}/reset`, {}); state.histories[state.key] = []; state.results[state.key] = []; renderMessages(); await refresh(); notice('Knowledge base reset. Process documents again to start a new conversation.'); } catch (e) { notice(e.message); } finally { state.busy = false; controls(); }
+  try { await json(`/domains/${encodeURIComponent(state.key)}/reset`, {}); state.histories[state.key] = []; state.results[state.key] = []; clearPdfTabs(); renderMessages(); await refresh(); notice('Knowledge base reset. Process documents again to start a new conversation.'); } catch (e) { notice(e.message); } finally { state.busy = false; controls(); }
 });
 $('delete-domain').addEventListener('click', async () => {
   const domain = state.domains.find(d => d.key === state.key);
@@ -323,6 +404,7 @@ $('toggle-password').addEventListener('click', () => {
   setPasswordVisible($('admin-password').type === 'password');
 });
 function showLogin() {
+  clearPdfTabs();
   clearCredentials();
   state.online = false; state.status = null; state.domains = []; state.key = '';
   state.histories = {}; state.results = {};
