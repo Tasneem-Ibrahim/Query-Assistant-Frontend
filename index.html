@@ -87,7 +87,20 @@
           <div class="chat-tabs" role="group" aria-label="Workspace mode"><button class="active" id="chat-mode" aria-pressed="true">✦ Ask your documents</button><button id="search-mode" aria-pressed="false">⌕ Search passages</button></div>
           <div id="pdf-panels" class="pdf-panels" hidden></div>
           <div class="messages" id="messages" aria-live="polite"></div>
-          <div class="composer-wrap"><div class="notice" id="notice" role="status" hidden></div><form id="question-form"><label class="sr-only" for="question">Your question</label><textarea id="question" rows="1" maxlength="12000" placeholder="What would you like to know?" disabled></textarea><button class="send" id="send" type="submit" aria-label="Send question" disabled>↑</button></form><div class="composer-footer"><span><span class="spark">✦</span> Grounded in your documents</span><span>Enter to send · Shift + Enter for a new line</span></div></div>
+          <div class="composer-wrap">
+          <div id="voice-controls" class="voice-controls" aria-label="Voice query controls">
+            <label for="voice-language" class="sr-only">Speech language</label>
+            <select id="voice-language" aria-label="Speech language"><option value="en-US">English</option><option value="ur-PK">Urdu</option></select>
+            <div class="voice-actions" role="group" aria-label="Recording actions">
+            <button id="voice-pause" type="button" hidden>Pause</button>
+            <button id="voice-resume" type="button" hidden>Resume</button>
+            <button id="voice-stop" type="button" hidden>Stop</button>
+            <button id="voice-cancel" type="button" hidden>Cancel</button>
+            </div>
+            <span id="voice-status" role="status" aria-live="polite"></span>
+            <span id="voice-interim" class="voice-interim" aria-live="off" hidden></span>
+          </div>
+<div class="notice" id="notice" role="status" hidden></div><form id="question-form"><label class="sr-only" for="question">Your question</label><textarea id="question" rows="1" maxlength="12000" placeholder="What would you like to know?" disabled></textarea><button class="voice-mic" id="voice-start" type="button" aria-label="Start voice query" title="Start voice query" aria-pressed="false" disabled><svg viewBox="0 0 24 24" width="19" height="19" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="9" y="2" width="6" height="12" rx="3"/><path d="M5 10v2a7 7 0 0 0 14 0v-2M12 19v3M8 22h8"/></svg></button><button class="send" id="send" type="submit" aria-label="Send question" disabled>↑</button></form><div class="composer-footer"><span><span class="spark">✦</span> Grounded in your documents</span><span>Enter to send · Shift + Enter for a new line</span></div></div>
         </section>
       </div>
     </section>

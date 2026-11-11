@@ -256,3 +256,21 @@
 .pdf-frame { flex:1; width:100%; min-height:450px; border:0; background:#fff; }
 .pdf-status { padding:24px; font-size:13px; overflow-wrap:anywhere; }
 .pdf-fallback { padding:8px 16px; color:#b1ccff; font-size:12px; text-decoration:underline; }
+
+.voice-controls { display:flex; align-items:center; flex-wrap:wrap; gap:8px; padding:10px 0; flex-shrink:0; }
+.voice-controls button, .voice-controls select { width:auto; border:1px solid #7899cf44; border-radius:6px; background:#15233b; color:#dce6fa; padding:7px 10px; font-size:12px; }
+.voice-controls #voice-pause { border-color:#edc98b88; }
+.voice-controls #voice-status { flex-basis:100%; color:#a8bbd9; font-size:11px; line-height:1.5; }
+.voice-interim { flex-basis:100%; color:#c4dcff; font-size:12px; overflow-wrap:anywhere; max-height:60px; overflow:auto; }
+.composer-wrap textarea[readonly] { opacity:.8; }
+
+.voice-mic { display:grid; place-items:center; flex-shrink:0; width:32px; height:32px; padding:0; border:1px solid #7899cf44; border-radius:6px; background:#15233b; color:#b1ccff; }
+.voice-mic:hover:not(:disabled) { background:#243c60; border-color:#8cb5ff; }
+.voice-mic[aria-pressed="true"] { color:#edc98b; border-color:#edc98b88; opacity:1; }
+.composer-wrap textarea { min-width:0; }
+
+.voice-actions { display:flex; justify-content:flex-end; flex-wrap:wrap; gap:8px; margin-left:auto; }
+@media (max-width:430px) {
+  .voice-actions { gap:5px; }
+  .voice-controls button, .voice-controls select { padding:7px 8px; font-size:11px; }
+}

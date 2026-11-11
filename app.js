@@ -1,3 +1,4 @@
+import { createVoiceInput } from './voice.js';
 import { request, readEvents, runJobs, setCredentials, clearCredentials, restoreCredentials, persistCredentials } from './api.js';
 import { backendUrl } from './config.js';
 
@@ -22,7 +23,11 @@ function controls() {
   document.querySelectorAll('.view-image-text, .view-pdf').forEach(button => { button.disabled = unavailable; });
   $('upload').disabled = unavailable || !state.key || !state.file;
   $('question').disabled = unavailable || !state.status?.chunks;
-  $('send').disabled = unavailable || !state.status?.chunks || !$('question').value.trim();
+  if (unavailable || !state.status?.chunks) voice.pause('Paused while the workspace is unavailable. Resume when ready.');
+  const voiceState = voice.snapshot();
+  $('question').readOnly = voiceState.phase === 'listening' || voiceState.pending;
+  $('send').disabled = unavailable || !state.status?.chunks || (!$('question').value.trim() && !voiceState.interim.trim());
+  renderVoice();
   $('clear').disabled = state.busy;
   $('connection').disabled = state.busy;
   document.querySelectorAll('.delete-document').forEach(button => { button.disabled = unavailable; });
@@ -107,9 +112,49 @@ function renderStatus() {
   if (!files.length) $('documents').append(node('p', 'empty-documents', state.key ? 'No documents processed yet. Upload yours or try the bundled documents.' : 'Select your knowledge base to view its documents.'));
   controls();
 }
+const voice = createVoiceInput({
+  Recognition: window.SpeechRecognition || window.webkitSpeechRecognition,
+  read: () => $('question').value,
+  write: text => {
+    $('question').value = text;
+    $('question').style.height = 'auto';
+    $('question').style.height = `${Math.min($('question').scrollHeight, 130)}px`;
+  },
+  changed: () => controls()
+});
+function renderVoice() {
+  const current = voice.snapshot();
+  const active = current.phase !== 'idle' || current.pending;
+  const unavailable = !state.online || state.busy || !state.status?.chunks;
+  $('voice-start').disabled = active || unavailable || !current.supported || !window.isSecureContext;
+  $('voice-start').setAttribute('aria-pressed', String(current.phase === 'listening'));
+  $('voice-start').title = active ? 'Voice input in progress. Use the controls above.' : 'Start voice query';
+  $('voice-language').disabled = active || unavailable;
+  $('voice-pause').hidden = current.phase !== 'listening';
+  $('voice-resume').hidden = current.phase !== 'paused';
+  $('voice-resume').disabled = unavailable || current.pending;
+  $('voice-stop').hidden = !active;
+  $('voice-stop').disabled = current.pending;
+  $('voice-cancel').hidden = !active;
+  $('voice-status').textContent = !current.supported ? 'Voice input is unavailable in this browser. You can type your query.'
+    : !window.isSecureContext ? 'Voice input requires HTTPS or localhost.'
+    : current.message || (current.phase === 'listening' ? 'Listening... Select Pause to check your PDF.' : current.phase === 'paused' ? 'Paused. Resume to continue your query.' : 'Choose English or Urdu, then speak. Review text before sending.');
+  $('voice-interim').textContent = current.interim;
+  $('voice-interim').hidden = !current.interim;
+}
+$('voice-start').addEventListener('click', () => voice.start($('voice-language').value));
+$('voice-pause').addEventListener('click', () => voice.pause());
+$('voice-resume').addEventListener('click', () => voice.start($('voice-language').value));
+$('voice-stop').addEventListener('click', () => voice.stop());
+$('voice-cancel').addEventListener('click', () => voice.cancel());
+window.addEventListener('pagehide', () => voice.cancel({ restore: false }));
+document.addEventListener('visibilitychange', () => {
+  if (document.hidden) voice.pause('Paused while you are away. Select Resume to continue.');
+});
 const pdfTabs = new Map();
 let activePdf = null;
 function activatePdf(fileHash = null) {
+  if (fileHash) voice.pause('Paused for PDF review. Return to your question tab and select Resume to continue.');
   activePdf = fileHash;
   for (const [hash, tab] of pdfTabs) {
     tab.panel.hidden = hash !== fileHash;
@@ -125,6 +170,7 @@ function activatePdf(fileHash = null) {
   $('messages').hidden = Boolean(fileHash);
   document.querySelector('.composer-wrap').hidden = Boolean(fileHash);
   $('clear').hidden = Boolean(fileHash);
+  renderVoice();
 }
 function closePdf(fileHash) {
   const tab = pdfTabs.get(fileHash);
@@ -227,6 +273,7 @@ function renderDomainOptions() {
   $('domain').value = '';
 }
 async function selectDomain() {
+  voice.cancel({ restore: false });
   clearPdfTabs();
   clearImageText();
   state.key = $('domain').value; state.file = null; $('pdf').value = ''; $('selected-file').textContent = ''; $('question').value = ''; $('processing').hidden = true; notice();
@@ -248,6 +295,7 @@ async function selectDomain() {
   try { await refresh(); if (Object.keys(state.status?.pending_files || {}).length) notice('Some PDFs are incomplete. Click Resume saved documents to continue.'); else if (state.status && !state.status.chunks) notice(state.cloud || domain.custom ? 'Upload your first PDF to this knowledge base. You can add more PDFs on the same topic later.' : 'Add a PDF or use the bundled documents to start exploring.'); } catch (e) { notice(e.message); }
 }
 async function connect() {
+  voice.cancel({ restore: false });
   clearPdfTabs();
   clearImageText();
   const generation = ++state.generation;
@@ -305,10 +353,22 @@ async function ingest(bundled) {
   }
 }
 async function submit(event) {
-  event.preventDefault(); const question = $('question').value.trim();
-  if (!question || state.busy || !state.status?.chunks || !state.online) return;
+  event.preventDefault();
+  if (state.busy || !state.status?.chunks || !state.online) return;
   const topK = Number($('top-k').value);
   if (!Number.isInteger(topK) || topK < 1 || topK > 20) { notice('Choose between 1 and 20 retrieved passages in processing settings.'); return; }
+  const key = state.key, generation = state.generation;
+  if (voice.snapshot().phase !== 'idle' || voice.snapshot().pending) {
+    // Request final recognition results before reading or clearing the question.
+    const finished = voice.finish();
+    state.busy = true; controls();
+    const ready = await finished;
+    state.busy = false; controls();
+    if (!ready || key !== state.key || generation !== state.generation || !state.online) return;
+  }
+  const question = $('question').value.trim();
+  if (!question) return;
+  voice.cancel({ restore: false });
   const prior = history().map(({ role, content }) => ({ role, content }));
   const messages = state.mode === 'chat' ? history() : (state.results[state.key] ||= []);
   messages.push({ role: 'user', content: question }); $('question').value = ''; $('question').style.height = ''; state.busy = true; controls(); notice(); renderMessages();
@@ -404,6 +464,7 @@ $('toggle-password').addEventListener('click', () => {
   setPasswordVisible($('admin-password').type === 'password');
 });
 function showLogin() {
+  voice.cancel({ restore: false });
   clearPdfTabs();
   clearCredentials();
   state.online = false; state.status = null; state.domains = []; state.key = '';

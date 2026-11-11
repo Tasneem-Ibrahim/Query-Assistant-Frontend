@@ -124,6 +124,18 @@ The local server serves source files directly. Production uses static output fro
 
 Multiple related documents can belong to a base. Retrieval uses only its collection. Rename preserves content; document deletion removes its vectors and saved preview. Local reset keeps source files; cloud reset is disabled in favor of individual deletion/re-upload.
 
+## Voice queries
+
+Select English or Urdu and click the microphone icon inside the question field, beside Send. Allow microphone access when prompted. Confirmed speech appears in the question box; partial recognition appears beneath the controls. Urdu text uses the script returned by the browser (no Roman Urdu transliteration).
+
+- **Pause / Resume** preserves your query and appends more speech. You can edit confirmed text while paused.
+- Voice controls appear beside the question box in Ask/Search only. Opening or switching a PDF pauses listening and hides voice controls. Return to your question tab and select **Resume** to continue.
+- **Send** works during dictation: it stops listening, waits for final speech results, then submits your query. **Stop** is optional if you want to review/edit first.
+- **Cancel** restores the draft from before this dictation session.
+- Switching knowledge bases, signing out, or leaving the page stops recognition. Switching away from the browser tab pauses listening.
+
+Voice uses the browser SpeechRecognition service, requires HTTPS or localhost and microphone permission, and may require internet access. Browser/language support and Urdu accuracy vary; speech may be processed by the browser provider. Unsupported browsers retain typed queries. No transcription API key or backend change is required.
+
 ## Browser state and processing settings
 
 | State / setting | Location or behavior |
