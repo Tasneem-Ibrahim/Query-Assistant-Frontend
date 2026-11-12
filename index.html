@@ -125,6 +125,16 @@
   <footer class="shell"><a class="brand" href="#">Query Assistant<span class="brand-dot">.</span></a><span>Less searching. More understanding.</span><span>Built on your knowledge <span class="spark">✦</span></span></footer>
 
   </div>
+  <dialog id="delete-document-dialog" aria-labelledby="delete-document-title" aria-describedby="delete-document-description">
+    <form method="dialog">
+      <h3 id="delete-document-title">Delete document?</h3>
+      <p id="delete-document-description"></p>
+      <div class="delete-document-actions">
+        <button class="button secondary" value="cancel" autofocus>Cancel</button>
+        <button id="confirm-permanent-delete" class="button primary" value="delete">Permanently delete</button>
+      </div>
+    </form>
+  </dialog>
   <dialog id="domain-dialog"><form id="domain-form"><div class="panel-title"><h3 id="domain-dialog-title">New knowledge base</h3><button type="button" class="icon-button" id="close-domain" aria-label="Close">×</button></div><p id="domain-help">Choose any topic and give it your own name. Then upload one or more related PDFs or images. Your knowledge base stays saved in the dropdown.</p><label class="field-label" for="domain-name">KNOWLEDGE BASE NAME</label><input id="domain-name" type="text" maxlength="80" required placeholder="e.g. Biology Notes or My Research"><p id="domain-error" role="alert" hidden></p><button id="save-domain" class="button primary full" type="submit">Create knowledge base ↗</button></form></dialog>
   <dialog id="welcome-guide" aria-labelledby="welcome-title" aria-describedby="welcome-intro">
     <div class="welcome-top"><span class="eyebrow">A SPACE FOR YOUR KNOWLEDGE</span><button type="button" class="icon-button" id="close-welcome" aria-label="Close welcome guide">×</button></div>

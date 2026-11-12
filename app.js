@@ -75,7 +75,7 @@ function renderMessages() {
   const messages = state.mode === 'chat' ? history() : (state.results[state.key] || []);
   if (!messages.length) {
     const empty = node('div', 'chat-empty');
-    empty.append(node('div', 'empty-symbol', state.mode === 'chat' ? '✦' : '⌕'), node('h4', '', state.mode === 'chat' ? 'From Questions to Clarity, From Data to Insights' : 'Find the passage you need.'));
+    empty.append(node('div', 'empty-symbol', state.mode === 'chat' ? '✦' : '⌕'), node('h4', state.mode === 'chat' ? 'clarity-quote' : '', state.mode === 'chat' ? 'From Questions to Clarity,\nFrom Data to Insights' : 'Find the passage you need.'));
     const domain = state.domains.find(d => d.key === state.key);
     empty.append(node('p', '', state.mode === 'search' ? 'Find relevant excerpts in your documents.' : domain?.welcome || 'Connect your backend and add a PDF to get started.'));
     if (domain?.examples?.length) {
@@ -110,6 +110,7 @@ function renderStatus() {
     remove.type = 'button'; remove.title = `Delete ${file.name}`;
     remove.setAttribute('aria-label', `Delete ${file.name}`);
     remove.innerHTML = '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 6h18M9 6V4h6v2M5 6l1 14h12l1-14M10 10v6M14 10v6"/></svg>';
+    remove.append(document.createTextNode('Delete'));
     remove.addEventListener('click', () => deleteDocument(fileHash, file.name));
     const isImage = /\.(jpe?g|png|jfif|webp|bmp|tiff?|avif)$/i.test(file.name);
     if (isImage && !state.status?.pending_files?.[fileHash]) {
@@ -266,10 +267,22 @@ async function refresh() {
   try { const result = await json(`/domains/${encodeURIComponent(key)}/status`); if (key === state.key && generation === state.generation) state.status = result; }
   finally { if (generation === state.generation) renderStatus(); }
 }
+function confirmDeletion(title, description) {
+  const dialog = $('delete-document-dialog');
+  if (dialog.open) return Promise.resolve(false);
+  $('delete-document-title').textContent = title;
+  $('delete-document-description').textContent = description;
+  dialog.returnValue = 'cancel';
+  return new Promise(resolve => {
+    dialog.addEventListener('close', () => resolve(dialog.returnValue === 'delete'), { once: true });
+    dialog.showModal();
+  });
+}
 async function deleteDocument(fileHash, filename) {
   if (state.busy || !state.online || !state.key) return;
-  if (!confirm(`Delete “${filename}” from this knowledge base? Its saved PDF and searchable passages will be removed. Other documents will stay unchanged.`)) return;
   const key = state.key, generation = state.generation;
+  const confirmed = await confirmDeletion('Delete document?', `Permanently delete "${filename}"? The saved file and its searchable passages will be removed. This cannot be undone.`);
+  if (!confirmed || state.busy || !state.online || key !== state.key || generation !== state.generation) return;
   state.busy = true; controls();
   try {
     await request(base, `/domains/${encodeURIComponent(key)}/documents/${encodeURIComponent(fileHash)}`, { method: 'DELETE' });
@@ -438,7 +451,8 @@ $('delete-domain').addEventListener('click', async () => {
   const generation = state.generation;
   const domain = state.domains.find(d => d.key === state.key);
   if (state.busy || !domain?.custom) return;
-  if (!confirm(`Delete “${domain.label}” permanently? Its saved PDFs, vectors, and conversation will be removed. Other knowledge bases will stay unchanged.`)) return;
+  const confirmed = await confirmDeletion('Delete knowledge base?', `Permanently delete "${domain.label}"? All its saved documents, searchable passages, and conversation will be removed. This cannot be undone.`);
+  if (!confirmed || state.busy || !state.online || generation !== state.generation || domain.key !== state.key) return;
   state.busy = true; controls();
   try {
     await request(base, `/domains/${encodeURIComponent(domain.key)}`, { method: 'DELETE' });
@@ -519,7 +533,7 @@ function showLogin() {
   state.online = false; state.status = null; state.domains = []; state.key = '';
   state.busy = false; $('question').value = ''; $('logs').textContent = ''; $('processing').hidden = true;
   $('domain').replaceChildren(node('option', '', 'Select your knowledge base'));
-  for (const id of ['domain-dialog', 'settings']) if ($(id).open) $(id).close();
+  for (const id of ['domain-dialog', 'settings', 'delete-document-dialog']) if ($(id).open) $(id).close();
   $('domain-name').value = ''; $('account-name').textContent = ''; notice();
   $('chat-title').textContent = 'Document assistant';
   $('assistant-description').textContent = 'Select your knowledge base to get started, or create a new one.';
