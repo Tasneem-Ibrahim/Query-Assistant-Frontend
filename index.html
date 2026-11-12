@@ -126,6 +126,19 @@
 
   </div>
   <dialog id="domain-dialog"><form id="domain-form"><div class="panel-title"><h3 id="domain-dialog-title">New knowledge base</h3><button type="button" class="icon-button" id="close-domain" aria-label="Close">×</button></div><p id="domain-help">Choose any topic and give it your own name. Then upload one or more related PDFs or images. Your knowledge base stays saved in the dropdown.</p><label class="field-label" for="domain-name">KNOWLEDGE BASE NAME</label><input id="domain-name" type="text" maxlength="80" required placeholder="e.g. Biology Notes or My Research"><p id="domain-error" role="alert" hidden></p><button id="save-domain" class="button primary full" type="submit">Create knowledge base ↗</button></form></dialog>
+  <dialog id="welcome-guide" aria-labelledby="welcome-title" aria-describedby="welcome-intro">
+    <div class="welcome-top"><span class="eyebrow">A SPACE FOR YOUR KNOWLEDGE</span><button type="button" class="icon-button" id="close-welcome" aria-label="Close welcome guide">×</button></div>
+    <div class="welcome-symbol" aria-hidden="true">✦</div>
+    <h2 id="welcome-title">Your space.<br>Your knowledge.</h2>
+    <p id="welcome-intro">Start fresh. Bring your documents, and turn them into answers.</p>
+    <ol class="welcome-steps">
+      <li><span class="welcome-number" aria-hidden="true">01</span><div><h3>Create a knowledge base</h3><p>Click <strong>+ New knowledge base</strong> in the knowledge panel. Give your topic a name.</p></div></li>
+      <li><span class="welcome-number" aria-hidden="true">02</span><div><h3>Add your PDFs or images</h3><p>Select your knowledge base, choose a file in the upload area, then click <strong>Upload &amp; process</strong>.</p></div></li>
+      <li><span class="welcome-number" aria-hidden="true">03</span><div><h3>Ask. Search. Discover.</h3><p>Ask questions or search passages, with answers grounded in your own documents.</p></div></li>
+    </ol>
+    <p id="welcome-error" role="alert" hidden></p>
+    <div class="welcome-actions"><button type="button" id="welcome-create" class="button primary full">Create my knowledge base <span>↗</span></button><button type="button" id="welcome-later" class="text-link">I'll explore first</button></div>
+  </dialog>
   <dialog id="settings"><form id="settings-form"><div class="panel-title"><h3>Backend connection</h3><button type="button" class="icon-button" id="close-settings" aria-label="Close settings">×</button></div><p>Run the FastAPI bridge using <code>uvicorn api_server:app --port 8000</code>.</p><label class="field-label" for="api-url">API SERVER URL</label><input id="api-url" type="url" required placeholder="http://localhost:8000"><p class="settings-help">Local connections use port 3000, which your backend allows through CORS. No API keys belong in this frontend.</p><button class="button primary full" type="submit">Save & reconnect <span>↗</span></button></form></dialog>
   <script type="module" src="app.js"></script>
 </body>

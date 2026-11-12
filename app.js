@@ -1,6 +1,7 @@
 import { createVoiceInput } from './voice.js';
 import { request, readEvents, runJobs, resolveBackendBase, cancelWorkspaceRequests } from './api.js';
 import { backendUrl } from './config.js';
+import { createWorkspaceGuide } from './onboarding.js';
 
 // Supabase email links can redirect with tokens in the fragment. Sign in through
 // the cookie endpoint instead, and remove those credentials from browser history.
@@ -13,7 +14,13 @@ const $ = id => document.getElementById(id);
 let savedBase = '';
 try { savedBase = localStorage.getItem('pagewise-api') || ''; } catch { /* Storage may be unavailable. */ }
 let base = resolveBackendBase(location.hostname, location.origin, backendUrl, savedBase);
-const state = { domains: [], key: '', status: null, online: false, busy: false, mode: 'chat', histories: {}, results: {}, file: null, generation: 0 };
+const state = { domains: [], key: '', status: null, online: false, busy: false, mode: 'chat', histories: {}, results: {}, file: null, generation: 0, user: null };
+const guide = createWorkspaceGuide({
+  dialog: $('welcome-guide'), close: $('close-welcome'), later: $('welcome-later'),
+  start: $('welcome-create'), error: $('welcome-error'),
+  complete: () => json('/auth/onboarding/complete', {}),
+  create: () => { $('workspace').scrollIntoView({ behavior: 'smooth', block: 'start' }); openDomainDialog(false); }
+});
 const authChanges = typeof BroadcastChannel === 'function' ? new BroadcastChannel('query-assistant-auth') : null;
 const history = () => state.histories[state.key] ||= [];
 function node(tag, className, text) { const el = document.createElement(tag); if (className) el.className = className; if (text !== undefined) el.textContent = text; return el; }
@@ -55,7 +62,14 @@ function renderMessages() {
   const box = $('messages'); box.replaceChildren();
   if (!state.key) {
     const empty = node('div', 'chat-empty');
-    empty.append(node('h4', '', 'Select your knowledge base'), node('p', '', 'Choose a knowledge base from the dropdown to view your documents and start asking questions.'));
+    const fresh = state.online && !state.domains.length;
+    empty.append(node('h4', '', fresh ? 'Your workspace starts here.' : 'Select your knowledge base'), node('p', '', fresh ? 'Create your first knowledge base, then upload a PDF or image to start exploring your documents.' : 'Choose a knowledge base from the dropdown to view your documents and start asking questions.'));
+    if (fresh) {
+      const create = node('button', 'button secondary', '+ Create knowledge base');
+      create.type = 'button'; create.disabled = state.busy;
+      create.addEventListener('click', () => { if (!state.busy) openDomainDialog(false); });
+      empty.append(create);
+    }
     box.append(empty); return;
   }
   const messages = state.mode === 'chat' ? history() : (state.results[state.key] || []);
@@ -112,7 +126,7 @@ function renderStatus() {
     }
     item.append(node('span', 'mini-file', isImage ? 'IMG' : 'PDF'), info, remove); $('documents').append(item);
   }
-  if (!files.length) $('documents').append(node('p', 'empty-documents', state.key ? 'No documents processed yet. Upload yours or try the bundled documents.' : 'Select your knowledge base to view its documents.'));
+  if (!files.length) $('documents').append(node('p', 'empty-documents', state.key ? 'No documents processed yet. Upload your first PDF or image.' : state.online && !state.domains.length ? 'Create a knowledge base to add your first document.' : 'Select your knowledge base to view its documents.'));
   controls();
 }
 const voice = createVoiceInput({
@@ -270,7 +284,7 @@ async function deleteDocument(fileHash, filename) {
   finally { if (generation === state.generation) { state.busy = false; controls(); } }
 }
 function renderDomainOptions() {
-  const placeholder = node('option', '', 'Select your knowledge base');
+  const placeholder = node('option', '', state.domains.length ? 'Select your knowledge base' : 'Create your first knowledge base');
   placeholder.value = '';
   $('domain').replaceChildren(placeholder, ...state.domains.map(d => {
     const option = node('option', '', d.label); option.value = d.key; return option;
@@ -312,12 +326,13 @@ async function connect() {
     if (!health.ok) throw new Error(health.configuration_errors?.join('. ') || 'Backend is not configured.');
     const domains = await json('/domains');
     if (generation !== state.generation) return;
-    if (!Array.isArray(domains) || !domains.length) throw new Error('No assistants available from this backend.');
+    if (!Array.isArray(domains)) throw new Error('Invalid knowledge base response from the backend.');
     state.cloud = health.storage === 'supabase';
     state.domains = domains; state.online = true;
     renderDomainOptions();
     await selectDomain();
     if (generation !== state.generation) return;
+    guide.show(state.user, state.domains);
     if (!health.deepseek_key) notice('Backend connected. Set DEEPSEEK_API_KEY in the backend .env to generate answers. You can still process PDFs and search passages.');
   } catch (e) {
     if (generation !== state.generation) return;
@@ -493,6 +508,8 @@ $('toggle-password').addEventListener('click', () => {
   setPasswordVisible($('admin-password').type === 'password');
 });
 function showLogin() {
+  guide.reset();
+  state.user = null;
   cancelWorkspaceRequests();
   voice.cancel({ restore: false });
   clearPdfTabs();
@@ -584,6 +601,7 @@ for (const id of ['admin-password', 'confirm-password']) {
 }
 async function openWorkspace(user) {
   showLogin();
+  state.user = user;
   $('account-name').textContent = user.name || user.email;
   $('admin-password').value = ''; $('confirm-password').value = '';
   setPasswordVisible(false);
