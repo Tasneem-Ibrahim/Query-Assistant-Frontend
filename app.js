@@ -1,5 +1,5 @@
 import { createVoiceInput } from './voice.js';
-import { request, readEvents, runJobs, resolveBackendBase } from './api.js';
+import { request, readEvents, runJobs, resolveBackendBase, cancelWorkspaceRequests } from './api.js';
 import { backendUrl } from './config.js';
 
 // Supabase email links can redirect with tokens in the fragment. Sign in through
@@ -14,6 +14,7 @@ let savedBase = '';
 try { savedBase = localStorage.getItem('pagewise-api') || ''; } catch { /* Storage may be unavailable. */ }
 let base = resolveBackendBase(location.hostname, location.origin, backendUrl, savedBase);
 const state = { domains: [], key: '', status: null, online: false, busy: false, mode: 'chat', histories: {}, results: {}, file: null, generation: 0 };
+const authChanges = typeof BroadcastChannel === 'function' ? new BroadcastChannel('query-assistant-auth') : null;
 const history = () => state.histories[state.key] ||= [];
 function node(tag, className, text) { const el = document.createElement(tag); if (className) el.className = className; if (text !== undefined) el.textContent = text; return el; }
 function notice(message = '') { $('notice').textContent = message; $('notice').hidden = !message; }
@@ -246,25 +247,27 @@ async function showImageText(fileHash) {
 $('close-ocr-preview').addEventListener('click', clearImageText);
 async function refresh() {
   if (!state.key) { state.status = null; renderStatus(); return; }
-  const key = state.key;
+  const key = state.key, generation = state.generation;
   state.status = null; controls();
-  try { const result = await json(`/domains/${encodeURIComponent(key)}/status`); if (key === state.key) state.status = result; }
-  finally { renderStatus(); }
+  try { const result = await json(`/domains/${encodeURIComponent(key)}/status`); if (key === state.key && generation === state.generation) state.status = result; }
+  finally { if (generation === state.generation) renderStatus(); }
 }
 async function deleteDocument(fileHash, filename) {
   if (state.busy || !state.online || !state.key) return;
   if (!confirm(`Delete “${filename}” from this knowledge base? Its saved PDF and searchable passages will be removed. Other documents will stay unchanged.`)) return;
-  const key = state.key;
+  const key = state.key, generation = state.generation;
   state.busy = true; controls();
   try {
     await request(base, `/domains/${encodeURIComponent(key)}/documents/${encodeURIComponent(fileHash)}`, { method: 'DELETE' });
+    if (generation !== state.generation) return;
     closePdf(fileHash);
     // Old answers may still quote the removed document.
     delete state.histories[key]; delete state.results[key]; clearImageText();
     renderMessages(); await refresh();
+    if (generation !== state.generation) return;
     notice(`“${filename}” and its searchable passages have been deleted.`);
-  } catch (e) { notice(e.message); }
-  finally { state.busy = false; controls(); }
+  } catch (e) { if (generation === state.generation) notice(e.message); }
+  finally { if (generation === state.generation) { state.busy = false; controls(); } }
 }
 function renderDomainOptions() {
   const placeholder = node('option', '', 'Select your knowledge base');
@@ -275,6 +278,7 @@ function renderDomainOptions() {
   $('domain').value = '';
 }
 async function selectDomain() {
+  const generation = state.generation;
   voice.cancel({ restore: false });
   clearPdfTabs();
   clearImageText();
@@ -294,7 +298,7 @@ async function selectDomain() {
   $('bundled').textContent = state.cloud ? 'Resume saved documents' : domain.custom ? 'Process saved documents' : 'Use bundled documents';
   $('assistant-description').textContent = domain.custom ? 'Add PDFs on any topic and explore them together.' : state.key === 'legal_assistant' ? 'Understand your contracts, clauses, and obligations.' : 'Explore orders, delivery, returns, and support policies.';
   renderMessages();
-  try { await refresh(); if (Object.keys(state.status?.pending_files || {}).length) notice('Some PDFs are incomplete. Click Resume saved documents to continue.'); else if (state.status && !state.status.chunks) notice(state.cloud || domain.custom ? 'Upload your first PDF to this knowledge base. You can add more PDFs on the same topic later.' : 'Add a PDF or use the bundled documents to start exploring.'); } catch (e) { notice(e.message); }
+  try { await refresh(); if (generation !== state.generation) return; if (Object.keys(state.status?.pending_files || {}).length) notice('Some PDFs are incomplete. Click Resume saved documents to continue.'); else if (state.status && !state.status.chunks) notice(state.cloud || domain.custom ? 'Upload your first PDF to this knowledge base. You can add more PDFs on the same topic later.' : 'Add a PDF or use the bundled documents to start exploring.'); } catch (e) { if (generation === state.generation) notice(e.message); }
 }
 async function connect() {
   voice.cancel({ restore: false });
@@ -304,6 +308,7 @@ async function connect() {
   state.online = false; state.status = null; state.domains = []; state.key = ''; controls(); renderStatus(); renderMessages();
   try {
     const health = await json('/health');
+    if (generation !== state.generation) return;
     if (!health.ok) throw new Error(health.configuration_errors?.join('. ') || 'Backend is not configured.');
     const domains = await json('/domains');
     if (generation !== state.generation) return;
@@ -312,6 +317,7 @@ async function connect() {
     state.domains = domains; state.online = true;
     renderDomainOptions();
     await selectDomain();
+    if (generation !== state.generation) return;
     if (!health.deepseek_key) notice('Backend connected. Set DEEPSEEK_API_KEY in the backend .env to generate answers. You can still process PDFs and search passages.');
   } catch (e) {
     if (generation !== state.generation) return;
@@ -328,30 +334,37 @@ function chooseFile(file) {
 }
 async function ingest(bundled) {
   if (state.busy || !state.online || !state.key) return;
+  const key = state.key, generation = state.generation;
   const imageName = !bundled && /\.(jpe?g|png|jfif|webp|bmp|tiff?|avif)$/i.test(state.file?.name || '') ? state.file.name.replace(/[^A-Za-z0-9._-]+/g, '_') : null;
   clearImageText();
   state.busy = true; controls(); notice(); $('processing').hidden = false; $('logs').textContent = 'Starting document processing…\n';
   const data = new FormData(); if (!bundled) data.append('file', state.file);
   data.append('force', $('force').checked); data.append('use_llm', $('use-llm').checked);
   try {
-    const response = await request(base, `/domains/${encodeURIComponent(state.key)}/ingest`, { method: 'POST', body: data });
+    const response = await request(base, `/domains/${encodeURIComponent(key)}/ingest`, { method: 'POST', body: data });
+    if (generation !== state.generation) return;
     const onEvent = event => {
+      if (generation !== state.generation) return;
       const log = event.type === 'done' ? `${event.report.name || event.report.file || 'Document'}: ${event.report.status}. ${event.report.chunks ?? 0} passages ready.` : event.message;
       if (log) { $('logs').append(document.createTextNode(log + '\n')); $('logs').scrollTop = $('logs').scrollHeight; }
     };
     if (response.headers.get('content-type')?.includes('application/json')) {
       const { jobs } = await response.json();
-      await runJobs(base, state.key, jobs, onEvent);
+      if (generation !== state.generation) return;
+      await runJobs(base, key, jobs, onEvent, () => generation === state.generation);
     } else await readEvents(response, onEvent);
+    if (generation !== state.generation) return;
     state.file = null; $('pdf').value = ''; $('selected-file').textContent = ''; notice('Your knowledge is ready. Ask a question or search the passages.');
-  } catch (e) { notice(e.message); }
+  } catch (e) { if (generation === state.generation) notice(e.message); }
   finally {
+    if (generation !== state.generation) return;
     try {
       await refresh();
+      if (generation !== state.generation) return;
       const image = imageName && Object.entries(state.status?.files || {}).find(([, file]) => file.name === imageName);
       if (image) await showImageText(image[0]);
-    } catch (e) { notice(e.message); }
-    state.busy = false; controls();
+    } catch (e) { if (generation === state.generation) notice(e.message); }
+    if (generation === state.generation) { state.busy = false; controls(); }
   }
 }
 async function submit(event) {
@@ -377,9 +390,10 @@ async function submit(event) {
   const thinking = node('div', 'thinking message', state.mode === 'chat' ? '✦ Finding answers in your documents…' : '⌕ Searching relevant passages…'); $('messages').append(thinking); $('messages').scrollTop = $('messages').scrollHeight;
   try {
     const result = await json(`/domains/${encodeURIComponent(state.key)}/${state.mode === 'chat' ? 'ask' : 'search'}`, state.mode === 'chat' ? { question, history: prior, top_k: topK } : { query: question, top_k: topK });
+    if (generation !== state.generation) return;
     messages.push({ role: 'assistant', content: state.mode === 'chat' ? result.answer : result.hits.length ? `Found ${result.hits.length} relevant passages. Open the sources below to explore.` : 'No matching passages found.', sources: state.mode === 'chat' ? result.sources : result.hits });
-  } catch (e) { messages.pop(); $('question').value = question; notice(e.message); }
-  finally { state.busy = false; renderMessages(); controls(); $('question').focus(); }
+  } catch (e) { if (generation === state.generation) { messages.pop(); $('question').value = question; notice(e.message); } }
+  finally { if (generation === state.generation) { state.busy = false; renderMessages(); controls(); $('question').focus(); } }
 }
 $('domain').addEventListener('change', selectDomain);
 $('pdf').addEventListener('change', event => chooseFile(event.target.files[0]));
@@ -392,26 +406,36 @@ $('question').addEventListener('input', () => { $('question').style.height = 'au
 $('question').addEventListener('keydown', event => { if (event.key === 'Enter' && !event.shiftKey && !event.isComposing) { event.preventDefault(); $('question-form').requestSubmit(); } });
 for (const mode of ['chat', 'search']) $(`${mode}-mode`).addEventListener('click', () => { state.mode = mode; activatePdf(); for (const name of ['chat', 'search']) { $(`${name}-mode`).classList.toggle('active', name === mode); $(`${name}-mode`).setAttribute('aria-pressed', String(name === mode)); } $('question').placeholder = mode === 'chat' ? 'What would you like to know?' : 'Search for a clause, topic, or passage…'; notice(); renderMessages(); });
 $('clear').addEventListener('click', () => { if (state.mode === 'chat') state.histories[state.key] = []; else state.results[state.key] = []; renderMessages(); notice(); });
-$('refresh').addEventListener('click', async () => { state.busy = true; controls(); try { await refresh(); notice(); } catch (e) { notice(e.message); } finally { state.busy = false; controls(); } });
+$('refresh').addEventListener('click', async () => {
+  const generation = state.generation;
+  state.busy = true; controls();
+  try { await refresh(); if (generation === state.generation) notice(); }
+  catch (e) { if (generation === state.generation) notice(e.message); }
+  finally { if (generation === state.generation) { state.busy = false; controls(); } }
+});
 $('reset').addEventListener('click', async () => {
+  const generation = state.generation, key = state.key;
   if (!confirm('Reset this assistant’s knowledge base? This removes its searchable passages and processing registry. The PDF files are kept.')) return;
   state.busy = true; controls();
-  try { await json(`/domains/${encodeURIComponent(state.key)}/reset`, {}); state.histories[state.key] = []; state.results[state.key] = []; clearPdfTabs(); renderMessages(); await refresh(); notice('Knowledge base reset. Process documents again to start a new conversation.'); } catch (e) { notice(e.message); } finally { state.busy = false; controls(); }
+  try { await json(`/domains/${encodeURIComponent(key)}/reset`, {}); if (generation !== state.generation) return; state.histories[key] = []; state.results[key] = []; clearPdfTabs(); renderMessages(); await refresh(); if (generation === state.generation) notice('Knowledge base reset. Process documents again to start a new conversation.'); } catch (e) { if (generation === state.generation) notice(e.message); } finally { if (generation === state.generation) { state.busy = false; controls(); } }
 });
 $('delete-domain').addEventListener('click', async () => {
+  const generation = state.generation;
   const domain = state.domains.find(d => d.key === state.key);
   if (state.busy || !domain?.custom) return;
   if (!confirm(`Delete “${domain.label}” permanently? Its saved PDFs, vectors, and conversation will be removed. Other knowledge bases will stay unchanged.`)) return;
   state.busy = true; controls();
   try {
     await request(base, `/domains/${encodeURIComponent(domain.key)}`, { method: 'DELETE' });
+    if (generation !== state.generation) return;
     delete state.histories[domain.key]; delete state.results[domain.key];
     state.domains = state.domains.filter(d => d.key !== domain.key);
     renderDomainOptions();
     await selectDomain();
+    if (generation !== state.generation) return;
     notice(`“${domain.label}” and its saved PDFs and vectors have been deleted.`);
-  } catch (e) { notice(e.message); }
-  finally { state.busy = false; controls(); }
+  } catch (e) { if (generation === state.generation) notice(e.message); }
+  finally { if (generation === state.generation) { state.busy = false; controls(); } }
 });
 $('connection').addEventListener('click', () => { $('api-url').value = base; $('settings').showModal(); });
 $('close-settings').addEventListener('click', () => $('settings').close());
@@ -435,6 +459,7 @@ $('rename-domain').addEventListener('click', () => openDomainDialog(true));
 $('close-domain').addEventListener('click', () => $('domain-dialog').close());
 $('domain-form').addEventListener('submit', async event => {
   event.preventDefault();
+  const generation = state.generation;
   const name = $('domain-name').value.trim();
   if (!name) { $('domain-name').setCustomValidity('Please enter a knowledge base name.'); $('domain-name').reportValidity(); return; }
   const rename = Boolean(editingDomain);
@@ -442,15 +467,17 @@ $('domain-form').addEventListener('submit', async event => {
   state.busy = true; controls(); $('save-domain').disabled = true; $('close-domain').disabled = true; $('domain-error').hidden = true;
   try {
     const domain = await (await request(base, rename ? `/domains/${encodeURIComponent(editingDomain)}` : '/domains', { method: rename ? 'PATCH' : 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ name }) })).json();
+    if (generation !== state.generation) return;
     if (rename) state.domains = state.domains.map(d => d.key === domain.key ? domain : d); else state.domains.push(domain);
     renderDomainOptions();
     $('domain').value = domain.key;
     await selectDomain();
+    if (generation !== state.generation) return;
     if (retainedFile) chooseFileAfterCreate(retainedFile);
     $('domain-dialog').close();
     notice(rename ? 'Knowledge base renamed. Your saved PDFs are unchanged.' : `“${domain.label}” is saved in your dropdown. Choose a PDF and click Upload & process.`);
-  } catch (e) { $('domain-error').textContent = e.message; $('domain-error').hidden = false; }
-  finally { state.busy = false; controls(); $('save-domain').disabled = false; $('close-domain').disabled = false; }
+  } catch (e) { if (generation === state.generation) { $('domain-error').textContent = e.message; $('domain-error').hidden = false; } }
+  finally { if (generation === state.generation) { state.busy = false; controls(); } $('save-domain').disabled = false; $('close-domain').disabled = false; }
 });
 function chooseFileAfterCreate(file) { state.file = file; $('selected-file').textContent = `${file.name} · ${(file.size / 1024 / 1024).toFixed(2)} MB`; }
 $('domain-name').addEventListener('input', () => $('domain-name').setCustomValidity(''));
@@ -466,12 +493,21 @@ $('toggle-password').addEventListener('click', () => {
   setPasswordVisible($('admin-password').type === 'password');
 });
 function showLogin() {
+  cancelWorkspaceRequests();
   voice.cancel({ restore: false });
   clearPdfTabs();
   ++state.generation;
   state.file = null; $('pdf').value = ''; $('selected-file').textContent = '';
   clearImageText();
   state.online = false; state.status = null; state.domains = []; state.key = '';
+  state.busy = false; $('question').value = ''; $('logs').textContent = ''; $('processing').hidden = true;
+  $('domain').replaceChildren(node('option', '', 'Select your knowledge base'));
+  for (const id of ['domain-dialog', 'settings']) if ($(id).open) $(id).close();
+  $('domain-name').value = ''; $('account-name').textContent = ''; notice();
+  $('chat-title').textContent = 'Document assistant';
+  $('assistant-description').textContent = 'Select your knowledge base to get started, or create a new one.';
+  $('rename-domain').hidden = true; $('delete-domain').hidden = true;
+  $('domain-error').textContent = ''; $('domain-error').hidden = true;
   state.histories = {}; state.results = {};
   $('admin-app').hidden = true; $('admin-app').inert = true;
   $('login-gate').hidden = false;
@@ -486,6 +522,7 @@ $('admin-logout').addEventListener('click', async () => {
   try {
     await request(base, '/auth/logout', { method: 'POST' });
     showLogin();
+    authChanges?.postMessage('session-changed');
   } catch (error) { notice(error.message); }
   finally { $('admin-logout').disabled = false; }
 });
@@ -546,6 +583,7 @@ for (const id of ['admin-password', 'confirm-password']) {
   $(id).addEventListener('input', () => $('confirm-password').setCustomValidity(''));
 }
 async function openWorkspace(user) {
+  showLogin();
   $('account-name').textContent = user.name || user.email;
   $('admin-password').value = ''; $('confirm-password').value = '';
   setPasswordVisible(false);
@@ -556,6 +594,7 @@ async function openWorkspace(user) {
 }
 $('login-form').addEventListener('submit', async event => {
   event.preventDefault();
+  const generation = state.generation;
   if (signupMode && $('admin-password').value !== $('confirm-password').value) {
     $('confirm-password').setCustomValidity('Passwords do not match.');
     $('confirm-password').reportValidity(); return;
@@ -566,26 +605,33 @@ $('login-form').addEventListener('submit', async event => {
     const body = { [adminMode ? 'username' : 'email']: $('user-email').value.trim(), password: $('admin-password').value };
     if (signupMode) body.name = $('user-name').value.trim();
     const data = await json(adminMode ? '/auth/admin/login' : signupMode ? '/auth/signup' : '/auth/login', body);
+    if (generation !== state.generation) return;
     if (data.confirmation_required) {
       const email = body.email;
       authMode(false);
       $('user-email').value = email;
       $('auth-message').textContent = data.message; $('auth-message').hidden = false;
-    } else await openWorkspace(data.user);
+    } else {
+      authChanges?.postMessage('session-changed');
+      await openWorkspace(data.user);
+    }
   } catch (error) {
-    $('login-error').textContent = error.message; $('login-error').hidden = false;
+    if (generation === state.generation) { $('login-error').textContent = error.message; $('login-error').hidden = false; }
   } finally { $('login-submit').disabled = false; $('auth-switch').disabled = false; $('admin-auth-switch').disabled = false; }
 });
 renderMessages();
 async function resumeSession() {
   // Cookies persist safely across reloads. A 401 triggers one refresh and retry.
   showLogin();
+  const generation = state.generation;
   $('login-gate').hidden = true; $('session-loading').hidden = false;
   $('login-submit').disabled = true;
   try {
     const data = await json('/auth/session');
+    if (generation !== state.generation) return;
     await openWorkspace(data.user);
   } catch (error) {
+    if (generation !== state.generation) return;
     $('login-gate').hidden = false;
     if (error.status !== 401) {
       $('login-error').textContent = error.message; $('login-error').hidden = false;
@@ -595,4 +641,6 @@ async function resumeSession() {
     $('login-submit').disabled = false;
   }
 }
+authChanges?.addEventListener('message', () => resumeSession());
+window.addEventListener('pageshow', event => { if (event.persisted) resumeSession(); });
 resumeSession();

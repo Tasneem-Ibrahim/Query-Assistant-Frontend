@@ -1,5 +1,12 @@
 // Tokens are managed by the backend in HttpOnly cookies, never browser storage.
 const refreshes = new Map();
+let workspaceRequests = new AbortController();
+
+export function cancelWorkspaceRequests() {
+  workspaceRequests.abort();
+  workspaceRequests = new AbortController();
+  refreshes.clear();
+}
 
 export function resolveBackendBase(hostname, origin, configured = '', saved = '') {
   const loopback = host => ['localhost', '127.0.0.1', '[::1]'].includes(host);
@@ -22,29 +29,34 @@ function forgetLegacySession() {
 forgetLegacySession();
 
 export async function request(base, path, options = {}) {
+  const scopeSignal = workspaceRequests.signal;
+  const signal = options.signal ? AbortSignal.any([options.signal, scopeSignal]) : scopeSignal;
   base = base.replace(/\/$/, '');
   const headers = new Headers(options.headers);
   headers.set('X-CSRF-Protection', '1');
   const send = () => fetch(`${base}/api${path}`, {
-    ...options, headers, credentials: 'include', cache: 'no-store', redirect: 'error'
+    ...options, signal, headers, credentials: 'include', cache: 'no-store', redirect: 'error'
   });
   let response;
   try {
     response = await send();
+    signal.throwIfAborted();
     if (response.status === 401 && !['/auth/login', '/auth/admin/login', '/auth/signup', '/auth/refresh', '/auth/logout'].includes(path)) {
       if (!refreshes.has(base)) {
         const refresh = fetch(`${base}/api/auth/refresh`, {
           method: 'POST', credentials: 'include', cache: 'no-store', redirect: 'error',
+          signal: scopeSignal,
           headers: { 'X-CSRF-Protection': '1' }
-        }).finally(() => refreshes.delete(base));
+        }).finally(() => { if (refreshes.get(base) === refresh) refreshes.delete(base); });
         refreshes.set(base, refresh);
       }
       const refreshed = await refreshes.get(base);
+      signal.throwIfAborted();
       if (refreshed.ok) response = await send();
       else response = refreshed.clone();
     }
   } catch (error) {
-    if (options.signal?.aborted) throw error;
+    if (signal.aborted) throw error;
     throw new Error(`Cannot reach the backend at ${base || location.origin}. Check Connection settings and the backend CORS_ORIGINS setting.`);
   }
   if (!response.ok) {
@@ -94,11 +106,14 @@ export async function readEvents(response, onEvent) {
   } finally { await reader.cancel().catch(() => {}); reader.releaseLock(); }
 }
 
-export async function runJobs(base, key, jobs, onEvent) {
+export async function runJobs(base, key, jobs, onEvent, isCurrent = () => true) {
   for (const job of jobs) {
+    if (!isCurrent()) return;
     let result = job;
     while (result.status !== 'ready') {
+      if (!isCurrent()) return;
       result = await (await request(base, `/domains/${encodeURIComponent(key)}/documents/${encodeURIComponent(job.file_hash)}/step`, { method: 'POST' })).json();
+      if (!isCurrent()) return;
       if (!['pending', 'ready'].includes(result.status)) throw new Error('Unexpected document processing status. Resume saved documents to retry.');
       if (result.message) onEvent({ type: 'log', message: result.message });
     }

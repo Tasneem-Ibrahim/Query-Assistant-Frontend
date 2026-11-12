@@ -1,6 +1,44 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { readEvents, request, runJobs, resolveBackendBase } from '../api.js';
+import { readEvents, request, runJobs, resolveBackendBase, cancelWorkspaceRequests } from '../api.js';
+
+test('account change aborts old requests and discards late responses', async () => {
+  const original = globalThis.fetch;
+  let finish, oldSignal;
+  globalThis.fetch = async (_url, options) => {
+    oldSignal = options.signal;
+    return new Promise(resolve => { finish = resolve; });
+  };
+  try {
+    const pending = request('https://backend.example', '/domains');
+    const rejected = assert.rejects(pending, error => error.name === 'AbortError');
+    cancelWorkspaceRequests();
+    assert.equal(oldSignal.aborted, true);
+    finish(new Response('[{"key":"old-private-base"}]'));
+    await rejected;
+    globalThis.fetch = async (_url, options) => {
+      assert.equal(options.signal.aborted, false);
+      return new Response('[]');
+    };
+    assert.deepEqual(await (await request('https://backend.example', '/domains')).json(), []);
+  } finally { globalThis.fetch = original; cancelWorkspaceRequests(); }
+});
+
+test('account change stops remaining page jobs', async () => {
+  const original = globalThis.fetch;
+  let current = true, calls = 0;
+  globalThis.fetch = async () => {
+    calls++;
+    current = false;
+    return new Response('{"status":"pending","message":"old account page"}');
+  };
+  try {
+    const events = [];
+    await runJobs('https://backend.example', 'customer_support', [{ file_hash: 'private', status: 'pending' }], event => events.push(event), () => current);
+    assert.equal(calls, 1);
+    assert.deepEqual(events, []);
+  } finally { globalThis.fetch = original; }
+});
 
 test('local backend matches the frontend host so session cookies remain same-site', () => {
   assert.equal(resolveBackendBase('127.0.0.1', 'http://127.0.0.1:3000'), 'http://127.0.0.1:8000');
