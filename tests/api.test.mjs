@@ -1,51 +1,73 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { readEvents, request, runJobs, setCredentials, clearCredentials, persistCredentials, restoreCredentials } from '../api.js';
+import { readEvents, request, runJobs, resolveBackendBase } from '../api.js';
 
-test('saved session restores only for its backend and logout removes it', async () => {
-  const originalStorage = globalThis.sessionStorage;
-  const originalFetch = globalThis.fetch;
-  const values = new Map();
-  globalThis.sessionStorage = {
-    getItem: key => values.get(key) ?? null,
-    setItem: (key, value) => values.set(key, value),
-    removeItem: key => values.delete(key),
-  };
-  try {
-    setCredentials('https://backend.example', 'Admin', 'test-password');
-    persistCredentials();
-    const reloaded = await import(`../api.js?session-test=${Date.now()}`);
-    assert.equal(reloaded.restoreCredentials('https://another.example'), false);
-    assert.equal(reloaded.restoreCredentials('https://backend.example/'), true);
-    globalThis.fetch = async (url, options) => {
-      assert.equal(options.headers.get('Authorization'), `Basic ${btoa('Admin:test-password')}`);
-      return new Response('{}');
-    };
-    await reloaded.request('https://backend.example', '/auth/session');
-    reloaded.clearCredentials();
-    assert.equal(restoreCredentials('https://backend.example'), false);
-    assert.equal(values.size, 0);
-  } finally {
-    clearCredentials();
-    globalThis.sessionStorage = originalStorage;
-    globalThis.fetch = originalFetch;
-  }
+test('local backend matches the frontend host so session cookies remain same-site', () => {
+  assert.equal(resolveBackendBase('127.0.0.1', 'http://127.0.0.1:3000'), 'http://127.0.0.1:8000');
+  assert.equal(resolveBackendBase('localhost', 'http://localhost:3000'), 'http://localhost:8000');
+  assert.equal(resolveBackendBase('127.0.0.1', 'http://127.0.0.1:3000', '', 'http://localhost:8123'), 'http://127.0.0.1:8123');
+  assert.equal(resolveBackendBase('localhost', 'http://localhost:3000', '', 'http://127.0.0.1:8123'), 'http://localhost:8123');
 });
 
-test('credentials are scoped to the signed-in backend and cleared on logout', async () => {
+test('backend selection retains remote settings and discards stale local or invalid URLs', () => {
+  assert.equal(resolveBackendBase('localhost', 'http://localhost:3000', '', 'https://backend.example'), 'https://backend.example');
+  assert.equal(resolveBackendBase('frontend.example', 'https://frontend.example', 'https://backend.example', 'http://localhost:8000'), 'https://backend.example');
+  assert.equal(resolveBackendBase('localhost', 'http://localhost:3000', '', 'broken-url'), 'http://localhost:8000');
+  assert.equal(resolveBackendBase('localhost', 'http://localhost:3000', '', 'https://user:secret@backend.example'), 'http://localhost:8000');
+});
+
+test('requests use HttpOnly cookies and CSRF protection without password headers', async () => {
+  const original = globalThis.fetch;
+  globalThis.fetch = async (url, options) => {
+    assert.equal(options.credentials, 'include');
+    assert.equal(options.headers.get('X-CSRF-Protection'), '1');
+    assert.equal(options.headers.get('Authorization'), null);
+    return new Response('{}');
+  };
+  try { await request('https://backend.example', '/domains'); }
+  finally { globalThis.fetch = original; }
+});
+
+test('expired access refreshes once and retries the original request', async () => {
   const original = globalThis.fetch;
   const seen = [];
-  globalThis.fetch = async (url, options) => { seen.push(options.headers.get('Authorization')); return new Response('{}'); };
+  globalThis.fetch = async (url, options) => {
+    seen.push(url);
+    assert.equal(options.credentials, 'include');
+    if (seen.length === 1) return new Response('{}', { status: 401 });
+    return new Response('{}');
+  };
   try {
-    setCredentials('https://backend.example', 'Admin', 'test-password');
-    await request('https://backend.example', '/auth/session');
-    await request('https://another.example', '/health');
-    clearCredentials();
-    await request('https://backend.example', '/health');
-    assert.equal(seen[0], `Basic ${btoa('Admin:test-password')}`);
-    assert.equal(seen[1], null);
-    assert.equal(seen[2], null);
-  } finally { clearCredentials(); globalThis.fetch = original; }
+    await request('https://backend.example', '/domains');
+    assert.deepEqual(seen, ['https://backend.example/api/domains', 'https://backend.example/api/auth/refresh', 'https://backend.example/api/domains']);
+  } finally { globalThis.fetch = original; }
+});
+
+test('invalid login never attempts a token refresh', async () => {
+  const original = globalThis.fetch;
+  let calls = 0;
+  globalThis.fetch = async () => { calls++; return new Response('{"detail":"Wrong password"}', { status: 401 }); };
+  try {
+    await assert.rejects(request('https://backend.example', '/auth/login', { method: 'POST' }), /Wrong password/);
+    assert.equal(calls, 1);
+  } finally { globalThis.fetch = original; }
+});
+
+test('concurrent expired requests share one refresh', async () => {
+  const original = globalThis.fetch;
+  let refreshed = false, refreshCalls = 0;
+  globalThis.fetch = async url => {
+    if (url.endsWith('/auth/refresh')) {
+      refreshCalls++;
+      await new Promise(resolve => setTimeout(resolve, 5));
+      refreshed = true;
+    }
+    return new Response('{}', { status: refreshed ? 200 : 401 });
+  };
+  try {
+    await Promise.all([request('https://backend.example', '/domains'), request('https://backend.example', '/health')]);
+    assert.equal(refreshCalls, 1);
+  } finally { globalThis.fetch = original; }
 });
 
 test('unauthorized backend responses retain the login error', async () => {

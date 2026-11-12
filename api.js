@@ -1,42 +1,55 @@
-let authorization = '';
-let authorizedBase = '';
-const sessionKey = 'query-assistant-admin-session';
+// Tokens are managed by the backend in HttpOnly cookies, never browser storage.
+const refreshes = new Map();
 
-export function restoreCredentials(base) {
+export function resolveBackendBase(hostname, origin, configured = '', saved = '') {
+  const loopback = host => ['localhost', '127.0.0.1', '[::1]'].includes(host);
+  const local = loopback(hostname);
+  const fallback = configured || (local ? `http://${hostname}:8000` : origin);
+  let target;
   try {
-    const saved = JSON.parse(sessionStorage.getItem(sessionKey));
-    if (saved?.base !== base.replace(/\/$/, '') || typeof saved.authorization !== 'string' || !saved.authorization.startsWith('Basic ')) return false;
-    authorization = saved.authorization;
-    authorizedBase = saved.base;
-    return true;
-  } catch { return false; }
+    target = new URL(saved || fallback);
+    if (!['http:', 'https:'].includes(target.protocol) || target.username || target.password || target.search || target.hash
+        || (!local && loopback(target.hostname))) target = new URL(fallback);
+  } catch { target = new URL(fallback); }
+  // Ports may differ, but loopback hosts must match for SameSite cookies.
+  if (local && loopback(target.hostname)) target.hostname = hostname;
+  return target.href.replace(/\/$/, '');
 }
 
-export function persistCredentials() {
-  try { sessionStorage.setItem(sessionKey, JSON.stringify({ base: authorizedBase, authorization })); } catch { /* Storage may be unavailable. */ }
+function forgetLegacySession() {
+  try { sessionStorage.removeItem('query-assistant-admin-session'); } catch { /* Storage may be unavailable. */ }
 }
-
-export function setCredentials(base, username, password) {
-  const bytes = new TextEncoder().encode(`${username}:${password}`);
-  authorization = `Basic ${btoa(String.fromCharCode(...bytes))}`;
-  authorizedBase = base.replace(/\/$/, '');
-}
-
-export function clearCredentials() {
-  authorization = ''; authorizedBase = '';
-  try { sessionStorage.removeItem(sessionKey); } catch { /* Storage may be unavailable. */ }
-}
+forgetLegacySession();
 
 export async function request(base, path, options = {}) {
+  base = base.replace(/\/$/, '');
   const headers = new Headers(options.headers);
-  if (authorization && authorizedBase === base.replace(/\/$/, '')) headers.set('Authorization', authorization);
+  headers.set('X-CSRF-Protection', '1');
+  const send = () => fetch(`${base}/api${path}`, {
+    ...options, headers, credentials: 'include', cache: 'no-store', redirect: 'error'
+  });
   let response;
-  try { response = await fetch(`${base.replace(/\/$/, '')}/api${path}`, { ...options, headers, cache: 'no-store', redirect: 'error' }); }
-  catch { throw new Error(`Cannot reach the backend at ${base || location.origin}. Check the backend URL in Connection settings, HTTPS, and the backend CORS_ORIGINS setting.`); }
+  try {
+    response = await send();
+    if (response.status === 401 && !['/auth/login', '/auth/admin/login', '/auth/signup', '/auth/refresh', '/auth/logout'].includes(path)) {
+      if (!refreshes.has(base)) {
+        const refresh = fetch(`${base}/api/auth/refresh`, {
+          method: 'POST', credentials: 'include', cache: 'no-store', redirect: 'error',
+          headers: { 'X-CSRF-Protection': '1' }
+        }).finally(() => refreshes.delete(base));
+        refreshes.set(base, refresh);
+      }
+      const refreshed = await refreshes.get(base);
+      if (refreshed.ok) response = await send();
+      else response = refreshed.clone();
+    }
+  } catch (error) {
+    if (options.signal?.aborted) throw error;
+    throw new Error(`Cannot reach the backend at ${base || location.origin}. Check Connection settings and the backend CORS_ORIGINS setting.`);
+  }
   if (!response.ok) {
-    if (response.status === 401 && typeof window !== 'undefined') {
-      clearCredentials();
-      window.dispatchEvent(new Event('admin-login-required'));
+    if (response.status === 401 && !['/auth/login', '/auth/admin/login', '/auth/signup'].includes(path) && typeof window !== 'undefined') {
+      window.dispatchEvent(new Event('user-login-required'));
     }
     if (response.status === 405 && options.method === 'DELETE') {
       throw new Error('Deletion is not available in the running backend. Restart api_server.py, refresh this page, and try again. Nothing was deleted.');
@@ -45,7 +58,12 @@ export async function request(base, path, options = {}) {
     if (response.status === 404 && body.detail === 'Not Found' && /\/documents\/[^/]+\/text$/.test(path)) {
       throw new Error('The running backend has not loaded the extracted-text feature. Restart the backend (api_server:app), refresh this page, and click View text again. For a live website, deploy the updated backend.');
     }
-    throw new Error(typeof body.detail === 'string' ? body.detail : `Request failed (${response.status}).`);
+    const detail = typeof body.detail === 'string' ? body.detail
+      : Array.isArray(body.detail) ? body.detail.map(item => `${item.loc?.at(-1) || 'Input'}: ${item.msg}`).join('. ')
+      : `Request failed (${response.status}).`;
+    const error = new Error(detail);
+    error.status = response.status;
+    throw error;
   }
   return response;
 }

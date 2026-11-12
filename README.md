@@ -10,7 +10,7 @@ Built with HTML, CSS and native JavaScript modules. The browser talks to the [Fa
 
 | Feature | Behavior |
 | --- | --- |
-| Admin login | Backend verifies credentials; tab-scoped login can resume after refresh |
+| Sign up and sign in | Supabase accounts, password show/hide, HttpOnly sessions and automatic refresh |
 | Initial state | Every load/refresh shows **Select your knowledge base**, without automatically selecting Customer Support |
 | Built-in assistants | Customer Support and Legal Assistant personas |
 | Custom knowledge bases | Create, select, rename and delete named document collections |
@@ -29,7 +29,7 @@ Upload and document actions stay disabled until a base is selected. Questions re
 
 ```mermaid
 flowchart TB
-    User[User] --> Login[Admin login]
+    User[User] --> Login[Sign up or sign in]
     Login --> Select[Select a knowledge base]
     Select --> Upload[Upload PDF or image]
     Upload --> API[Authenticated FastAPI backend]
@@ -73,7 +73,7 @@ Backend alternatives include local `intfloat/multilingual-e5-small` embeddings a
 | --- | --- | --- | --- |
 | `BACKEND_URL` | Frontend build environment | Public backend origin in built `config.js` | Public; not an API key |
 | `PORT` | Local frontend process | Development server port, default `3000` | Not a secret |
-| `ADMIN_USERNAME` / `ADMIN_PASSWORD` | Backend; entered by admin at login | Authenticate application requests | Sent with authenticated requests; tab session in `sessionStorage`, never built into assets |
+| User email/password | Entered at sign up or sign in | Supabase Auth | Sent only to auth endpoints over HTTPS; tokens stay in HttpOnly cookies |
 | `DEEPSEEK_API_KEY` | Backend only | Cleanup, follow-up rewrite and answers | Never in frontend configuration |
 | `EMBEDDING_API_KEY` | Backend only | Embeddings; currently OpenRouter | Never in frontend configuration |
 | `SUPABASE_SERVICE_ROLE_KEY` | Backend only | Private files, metadata and job RPCs | Never in frontend configuration |
@@ -113,14 +113,14 @@ The local server serves source files directly. Production uses static output fro
 
 ## Demo walkthrough
 
-1. Sign in with backend admin credentials.
+1. For the existing admin, choose **Admin sign in** and use the original username/password from the backend `.env`. Other users create an account or sign in with email/password. Complete [backend Auth setup](../Query-Assistant-backend/AUTH_SETUP.md) first.
 2. The dropdown shows **Select your knowledge base**; select a base or create one.
 3. Browse/drop a supported file and click **Upload & process**.
 4. Watch logs; use **Resume saved documents** for interrupted Supabase jobs.
 5. Inspect an image's golden OCR preview; reopen it later with **View text**.
 6. Ask a question or select **Search passages**.
 7. Expand sources to inspect filenames, pages and excerpts.
-8. Refresh: login may resume in this tab, but base selection starts empty. Select the saved base to continue.
+8. Refresh: login resumes from secure cookies, but base selection starts empty. Select the saved base to continue.
 
 Multiple related documents can belong to a base. Retrieval uses only its collection. Rename preserves content; document deletion removes its vectors and saved preview. Local reset keeps source files; cloud reset is disabled in favor of individual deletion/re-upload.
 
@@ -142,7 +142,7 @@ Voice uses the browser SpeechRecognition service, requires HTTPS or localhost an
 | --- | --- |
 | Selected knowledge base | Page memory; intentionally empty after reload |
 | Chat/search conversation | Page memory; cleared on reload |
-| Admin login | Backend-scoped credentials in memory and tab `sessionStorage`; logout clears session |
+| User session | HttpOnly backend cookies; 15-minute access, rotating refresh, seven-day absolute session; logout revokes session |
 | Backend URL override | Browser `localStorage`, key `pagewise-api` |
 | Documents, vectors and base names | Persisted by backend, independent of page refresh |
 | Use LLM normalization | Optional model-assisted backend cleanup |
@@ -158,7 +158,9 @@ Connection priority: saved override → build-time `BACKEND_URL` → local `http
 
 | Operation | Endpoint | Handling |
 | --- | --- | --- |
-| Login/resume | `GET /api/auth/session` | Verify credentials |
+| Sign up / sign in | `POST /api/auth/signup`, `POST /api/auth/login` | Create or authenticate user |
+| Resume / refresh | `GET /api/auth/session`, `POST /api/auth/refresh` | Verify or renew cookie session |
+| Sign out | `POST /api/auth/logout` | Revoke session and clear cookies |
 | Load bases | `GET /api/domains` | Populate dropdown with empty placeholder first |
 | Status | `GET /api/domains/{key}/status` | Display ready/pending files and passages |
 | Upload | `POST /api/domains/{key}/ingest` | Multipart file and options |
@@ -230,7 +232,7 @@ Live Tesseract OCR needs its executable and Python dependencies installed on the
 | Backend unreachable / requests blocked | Check origin, HTTPS, server and CORS |
 | Wrong backend after deployment | Inspect Connection settings override and `BACKEND_URL` |
 | Old styling visible | Refresh with **Ctrl+F5** |
-| Login fails | Check admin credentials; provider API keys are not login credentials |
+| Login fails | Check email/password and email confirmation; see backend AUTH_SETUP.md |
 
 ## Presentation summary
 

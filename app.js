@@ -1,16 +1,18 @@
 import { createVoiceInput } from './voice.js';
-import { request, readEvents, runJobs, setCredentials, clearCredentials, restoreCredentials, persistCredentials } from './api.js';
+import { request, readEvents, runJobs, resolveBackendBase } from './api.js';
 import { backendUrl } from './config.js';
 
+// Supabase email links can redirect with tokens in the fragment. Sign in through
+// the cookie endpoint instead, and remove those credentials from browser history.
+const authReturn = new URLSearchParams(location.hash.slice(1));
+if (authReturn.has('access_token') || authReturn.has('refresh_token') || authReturn.has('error_description')) {
+  window.history.replaceState(null, '', location.pathname + location.search);
+}
+
 const $ = id => document.getElementById(id);
-let base;
-const local = ['localhost', '127.0.0.1', '[::1]'].includes(location.hostname);
-const defaultBase = backendUrl || (local ? 'http://localhost:8000' : location.origin);
-try {
-  const saved = localStorage.getItem('pagewise-api');
-  const staleLocal = saved && !local && ['localhost', '127.0.0.1', '[::1]'].includes(new URL(saved).hostname);
-  base = saved && !staleLocal ? saved : defaultBase;
-} catch { base = defaultBase; }
+let savedBase = '';
+try { savedBase = localStorage.getItem('pagewise-api') || ''; } catch { /* Storage may be unavailable. */ }
+let base = resolveBackendBase(location.hostname, location.origin, backendUrl, savedBase);
 const state = { domains: [], key: '', status: null, online: false, busy: false, mode: 'chat', histories: {}, results: {}, file: null, generation: 0 };
 const history = () => state.histories[state.key] ||= [];
 function node(tag, className, text) { const el = document.createElement(tag); if (className) el.className = className; if (text !== undefined) el.textContent = text; return el; }
@@ -416,7 +418,7 @@ $('close-settings').addEventListener('click', () => $('settings').close());
 $('settings-form').addEventListener('submit', event => {
   event.preventDefault(); const url = new URL($('api-url').value);
   if (!['http:', 'https:'].includes(url.protocol) || url.username || url.password || url.search || url.hash) { $('api-url').setCustomValidity('Use an HTTP or HTTPS server URL without credentials, query, or fragment.'); $('api-url').reportValidity(); return; }
-  base = url.href.replace(/\/$/, '').replace(/\/api$/, ''); try { localStorage.setItem('pagewise-api', base); } catch {} $('settings').close(); connect();
+  base = resolveBackendBase(location.hostname, location.origin, backendUrl, url.href.replace(/\/$/, '').replace(/\/api$/, '')); try { localStorage.setItem('pagewise-api', base); } catch {} $('settings').close(); resumeSession();
 });
 $('api-url').addEventListener('input', () => $('api-url').setCustomValidity(''));
 let editingDomain = null;
@@ -466,17 +468,27 @@ $('toggle-password').addEventListener('click', () => {
 function showLogin() {
   voice.cancel({ restore: false });
   clearPdfTabs();
-  clearCredentials();
+  ++state.generation;
+  state.file = null; $('pdf').value = ''; $('selected-file').textContent = '';
+  clearImageText();
   state.online = false; state.status = null; state.domains = []; state.key = '';
   state.histories = {}; state.results = {};
   $('admin-app').hidden = true; $('admin-app').inert = true;
   $('login-gate').hidden = false;
   $('admin-password').value = '';
+  $('confirm-password').value = '';
   setPasswordVisible(false);
   controls(); renderMessages(); renderStatus();
 }
-window.addEventListener('admin-login-required', showLogin);
-$('admin-logout').addEventListener('click', () => { clearCredentials(); location.reload(); });
+window.addEventListener('user-login-required', showLogin);
+$('admin-logout').addEventListener('click', async () => {
+  $('admin-logout').disabled = true;
+  try {
+    await request(base, '/auth/logout', { method: 'POST' });
+    showLogin();
+  } catch (error) { notice(error.message); }
+  finally { $('admin-logout').disabled = false; }
+});
 document.addEventListener('click', event => {
   const menu = $('admin-menu');
   if (!menu.contains(event.target)) menu.open = false;
@@ -489,40 +501,95 @@ document.addEventListener('keydown', event => {
   }
 });
 $('login-connection').addEventListener('click', () => { $('api-url').value = base; $('settings').showModal(); });
+let signupMode = false;
+let adminMode = false;
+function authMode(signup, admin = false) {
+  signupMode = signup;
+  adminMode = admin;
+  $('user-email').type = admin ? 'text' : 'email';
+  $('user-email').maxLength = admin ? 80 : 254;
+  $('user-email').value = '';
+  $('login-identity-label').textContent = admin ? 'ADMIN USERNAME' : 'EMAIL';
+  $('admin-auth-switch').textContent = admin ? 'User sign in' : 'Admin sign in';
+  $('auth-switch').hidden = admin;
+
+  $('auth-title').textContent = admin ? 'Admin sign in' : signup ? 'Create your account' : 'Welcome back';
+  $('auth-description').textContent = admin ? 'Use your existing admin username and password.' : signup ? 'Sign up to start asking questions about your documents.' : 'Sign in to access your knowledge bases and documents.';
+  $('signup-name-field').hidden = !signup;
+  $('confirm-password-field').hidden = !signup;
+  for (const id of ['user-name', 'confirm-password']) {
+    $(id).disabled = !signup; $(id).required = signup;
+  }
+  $('admin-password').minLength = signup ? 8 : 1;
+  $('admin-password').autocomplete = signup ? 'new-password' : 'current-password';
+  $('login-submit').textContent = signup ? 'Create account' : 'Sign in';
+  $('auth-switch').textContent = signup ? 'Already have an account? Sign in' : 'New here? Create an account';
+  $('login-error').hidden = true; $('auth-message').hidden = true;
+  $('admin-password').value = ''; $('confirm-password').value = '';
+  $('confirm-password').setCustomValidity('');
+  $('confirm-password').type = 'password';
+  $('toggle-confirm-password').textContent = 'Show';
+  $('toggle-confirm-password').setAttribute('aria-pressed', 'false');
+  $('toggle-confirm-password').setAttribute('aria-label', 'Show confirm password');
+  setPasswordVisible(false);
+}
+$('auth-switch').addEventListener('click', () => authMode(!signupMode));
+$('admin-auth-switch').addEventListener('click', () => authMode(false, !adminMode));
+$('toggle-confirm-password').addEventListener('click', () => {
+  const visible = $('confirm-password').type === 'password';
+  $('confirm-password').type = visible ? 'text' : 'password';
+  $('toggle-confirm-password').textContent = visible ? 'Hide' : 'Show';
+  $('toggle-confirm-password').setAttribute('aria-pressed', String(visible));
+  $('toggle-confirm-password').setAttribute('aria-label', visible ? 'Hide confirm password' : 'Show confirm password');
+});
+for (const id of ['admin-password', 'confirm-password']) {
+  $(id).addEventListener('input', () => $('confirm-password').setCustomValidity(''));
+}
+async function openWorkspace(user) {
+  $('account-name').textContent = user.name || user.email;
+  $('admin-password').value = ''; $('confirm-password').value = '';
+  setPasswordVisible(false);
+  $('session-loading').hidden = true;
+  $('login-gate').hidden = true;
+  $('admin-app').hidden = false; $('admin-app').inert = false;
+  await connect();
+}
 $('login-form').addEventListener('submit', async event => {
   event.preventDefault();
-  $('login-submit').disabled = true; $('login-error').hidden = true;
+  if (signupMode && $('admin-password').value !== $('confirm-password').value) {
+    $('confirm-password').setCustomValidity('Passwords do not match.');
+    $('confirm-password').reportValidity(); return;
+  }
+  $('login-submit').disabled = true; $('auth-switch').disabled = true; $('admin-auth-switch').disabled = true;
+  $('login-error').hidden = true; $('auth-message').hidden = true;
   try {
-    setCredentials(base, $('admin-name').value.trim(), $('admin-password').value);
-    await request(base, '/auth/session');
-    persistCredentials();
-    $('admin-password').value = '';
-    setPasswordVisible(false);
-    $('login-gate').hidden = true;
-    $('admin-app').hidden = false; $('admin-app').inert = false;
-    await connect();
+    const body = { [adminMode ? 'username' : 'email']: $('user-email').value.trim(), password: $('admin-password').value };
+    if (signupMode) body.name = $('user-name').value.trim();
+    const data = await json(adminMode ? '/auth/admin/login' : signupMode ? '/auth/signup' : '/auth/login', body);
+    if (data.confirmation_required) {
+      const email = body.email;
+      authMode(false);
+      $('user-email').value = email;
+      $('auth-message').textContent = data.message; $('auth-message').hidden = false;
+    } else await openWorkspace(data.user);
   } catch (error) {
-    clearCredentials();
     $('login-error').textContent = error.message; $('login-error').hidden = false;
-  } finally { $('login-submit').disabled = false; }
+  } finally { $('login-submit').disabled = false; $('auth-switch').disabled = false; $('admin-auth-switch').disabled = false; }
 });
 renderMessages();
 async function resumeSession() {
-  if (!restoreCredentials(base)) {
-    $('session-loading').hidden = true;
-    $('login-gate').hidden = false;
-    return;
-  }
+  // Cookies persist safely across reloads. A 401 triggers one refresh and retry.
+  showLogin();
+  $('login-gate').hidden = true; $('session-loading').hidden = false;
   $('login-submit').disabled = true;
   try {
-    await request(base, '/auth/session');
-    $('session-loading').hidden = true;
-    $('login-gate').hidden = true;
-    $('admin-app').hidden = false; $('admin-app').inert = false;
-    await connect();
+    const data = await json('/auth/session');
+    await openWorkspace(data.user);
   } catch (error) {
     $('login-gate').hidden = false;
-    $('login-error').textContent = error.message; $('login-error').hidden = false;
+    if (error.status !== 401) {
+      $('login-error').textContent = error.message; $('login-error').hidden = false;
+    }
   } finally {
     $('session-loading').hidden = true;
     $('login-submit').disabled = false;

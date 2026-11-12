@@ -274,3 +274,12 @@
   .voice-actions { gap:5px; }
   .voice-controls button, .voice-controls select { padding:7px 8px; font-size:11px; }
 }
+
+/* Account screens share the existing workspace visual language. */
+.login-gate { overflow-y: auto; padding-block: 32px; }
+.login-card { margin-block: auto; }
+.login-card .auth-session-note { font-size: 11px; line-height: 1.6; opacity: .7; margin: 16px 0 0; }
+#auth-message { color: #9cdbb6; font-size: 13px; line-height: 1.6; }
+#auth-switch { margin-top: 16px; }
+#signup-name-field, #confirm-password-field { width: 100%; }
+#toggle-confirm-password { font-size: 11px; min-width: 46px; }
