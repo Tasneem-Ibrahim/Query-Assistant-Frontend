@@ -120,8 +120,8 @@ function renderStatus() {
       info.append(view);
     }
     if (/\.pdf$/i.test(file.name)) {
-      const view = node('button', 'view-pdf', 'View PDF');
-      view.type = 'button'; view.setAttribute('aria-label', `View PDF ${file.name}`);
+      const view = node('button', 'view-pdf', 'View / edit chunks');
+      view.type = 'button'; view.setAttribute('aria-label', `View and edit processed chunks: ${file.name}`);
       view.addEventListener('click', () => openPdf(fileHash, file.name));
       info.append(view);
     }
@@ -170,6 +170,9 @@ document.addEventListener('visibilitychange', () => {
   if (document.hidden) voice.pause('Paused while you are away. Select Resume to continue.');
 });
 const pdfTabs = new Map();
+window.addEventListener('beforeunload', event => {
+  if ([...pdfTabs.values()].some(tab => tab.isDirty?.())) { event.preventDefault(); event.returnValue = ''; }
+});
 let activePdf = null;
 function activatePdf(fileHash = null) {
   if (fileHash) voice.pause('Paused for PDF review. Return to your question tab and select Resume to continue.');
@@ -194,6 +197,7 @@ function closePdf(fileHash) {
   const tab = pdfTabs.get(fileHash);
   if (!tab) return;
   tab.controller.abort();
+  tab.editorResize?.disconnect();
   tab.panel.remove(); tab.wrapper.remove();
   if (tab.url) URL.revokeObjectURL(tab.url);
   pdfTabs.delete(fileHash);
@@ -217,23 +221,110 @@ async function openPdf(fileHash, filename) {
   const close = node('button', 'pdf-tab-close', '\u00d7');
   close.type = 'button'; close.title = `Close ${filename}`;
   close.setAttribute('aria-label', `Close PDF ${filename}`);
-  close.addEventListener('click', () => closePdf(fileHash));
+  close.addEventListener('click', () => {
+    if (tab.isDirty?.() && !confirm('Discard unsaved document changes?')) return;
+    closePdf(fileHash);
+  });
   wrapper.append(button, close); document.querySelector('.chat-tabs').append(wrapper);
   const panel = node('section', 'pdf-panel');
-  panel.setAttribute('aria-label', `PDF preview: ${filename}`);
-  const status = node('p', 'pdf-status', 'Loading PDF...'); status.setAttribute('role', 'status');
+  panel.setAttribute('aria-label', `Processed document editor: ${filename}`);
+  const status = node('p', 'pdf-status', 'Loading processed chunks...'); status.setAttribute('role', 'status');
   panel.append(status); $('pdf-panels').append(panel);
   const tab = { wrapper, button, panel, controller: new AbortController(), url: null };
   pdfTabs.set(fileHash, tab); activatePdf(fileHash);
+  const generation = state.generation;
   try {
-    const response = await request(base, `/domains/${encodeURIComponent(key)}/documents/${encodeURIComponent(fileHash)}/pdf`, { signal: tab.controller.signal });
-    const blob = await response.blob();
-    if (pdfTabs.get(fileHash) !== tab) return;
-    tab.url = URL.createObjectURL(new Blob([blob], { type: 'application/pdf' }));
-    const frame = node('iframe', 'pdf-frame'); frame.title = filename; frame.src = tab.url;
-    const fallback = node('a', 'pdf-fallback', 'Open PDF in a new tab');
-    fallback.href = tab.url; fallback.target = '_blank'; fallback.rel = 'noopener';
-    panel.replaceChildren(fallback, frame);
+    const path = `/domains/${encodeURIComponent(key)}/documents/${encodeURIComponent(fileHash)}/chunks`;
+    const response = await request(base, path, { signal: tab.controller.signal });
+    let saved = await response.json();
+    if (pdfTabs.get(fileHash) !== tab || generation !== state.generation) return;
+    const heading = node('div', 'editor-heading');
+    heading.append(node('span', 'editor-eyebrow', 'YOUR DOCUMENT'), node('h3', '', filename));
+    const intro = node('p', 'editor-help', 'Review your processed text, make changes, then save.');
+    const explanation = node('details', 'editor-explanation');
+    explanation.append(node('summary', '', 'How saving works'), node('p', '', 'Saving cleans the text, removes duplicate chunks and updates search. Page numbers refer to the original PDF; choose a source page for added text.'));
+    heading.append(intro, explanation);
+    const scroll = node('div', 'editor-scroll');
+    const list = node('div', 'editor-chunks');
+    const toolbar = node('div', 'editor-toolbar');
+    const add = node('button', 'button secondary', 'Add chunk');
+    const save = node('button', 'button primary', 'Save & vectorize');
+    const message = node('p', 'editor-status', 'All changes saved.');
+    message.setAttribute('role', 'status');
+    let dirty = false, saving = false;
+    const changed = () => { dirty = true; message.textContent = 'Unsaved changes'; save.disabled = false; };
+    const numberChunks = () => {
+      [...list.children].forEach((card, index) => { card.querySelector('.editor-chunk-number').textContent = `CHUNK ${String(index + 1).padStart(2, '0')}`; });
+    };
+    const addChunk = (part = { text: '', page: 1 }) => {
+      const card = node('section', 'editor-chunk');
+      const header = node('div', 'editor-chunk-header');
+      const number = node('h4', 'editor-chunk-number');
+      const label = node('label', '', 'Source page ');
+      const page = node('input'); page.type = 'number'; page.min = '1'; page.max = String(saved.pages); page.value = part.page;
+      page.setAttribute('aria-label', 'Original page number');
+      const remove = node('button', 'button secondary', 'Remove chunk'); remove.type = 'button';
+      const text = node('textarea'); text.value = part.text; text.rows = 2;
+      text.setAttribute('aria-label', 'Chunk text'); text.maxLength = 100000;
+      const fitText = () => {
+        if (!text.clientWidth) return;
+        text.style.height = 'auto';
+        text.style.height = `${text.scrollHeight + 2}px`;
+      };
+      text.addEventListener('input', () => { fitText(); changed(); }); page.addEventListener('input', changed);
+      remove.addEventListener('click', () => { card.remove(); numberChunks(); changed(); });
+      label.append(page); header.append(number, label, remove); card.append(header, text); list.append(card); numberChunks(); requestAnimationFrame(fitText);
+    };
+    const render = () => { list.replaceChildren(); saved.chunks.forEach(addChunk); };
+    add.type = save.type = 'button'; save.disabled = true;
+    add.addEventListener('click', () => { addChunk(); changed(); list.lastElementChild.querySelector('textarea').focus(); });
+    close.addEventListener('click', event => { if (saving) event.stopImmediatePropagation(); }, { capture: true });
+    // Keep all drafts intact if validation or embedding fails.
+    save.addEventListener('click', async () => {
+      if (!dirty || saving || state.busy || generation !== state.generation) return;
+      const chunks = [...list.children].map(card => ({ text: card.querySelector('textarea').value, page: Number(card.querySelector('input').value) }));
+      if (!chunks.some(c => c.text.trim())) { message.textContent = 'Keep at least one non-empty chunk.'; return; }
+      saving = true; state.busy = true; controls();
+      panel.querySelectorAll('button, input, textarea').forEach(el => { el.disabled = true; });
+      save.textContent = 'Saving...';
+      message.textContent = 'Saving and rebuilding embeddings...';
+      try {
+        const result = await request(base, path, { method: 'PUT', signal: tab.controller.signal,
+          headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ revision: saved.revision, chunks }) });
+        const updated = await result.json();
+        if (generation !== state.generation || pdfTabs.get(fileHash) !== tab) return;
+        saved = updated; dirty = false; render();
+        delete state.histories[key]; delete state.results[key]; renderMessages();
+        message.textContent = `Saved. All changes saved. ${saved.chunks.length} chunks ready for search.`;
+        try { await refresh(); } catch { message.textContent += ' Refresh document status to update the count.'; }
+      } catch (error) {
+        if (generation === state.generation && pdfTabs.get(fileHash) === tab) message.textContent = error.message + ' Your draft is still here.';
+      } finally {
+        saving = false;
+        if (generation === state.generation && pdfTabs.get(fileHash) === tab) {
+          state.busy = false; controls();
+          panel.querySelectorAll('button, input, textarea').forEach(el => { el.disabled = false; });
+          save.disabled = !dirty; save.textContent = 'Save & vectorize';
+        }
+      }
+    });
+    tab.isDirty = () => dirty;
+    render();
+    scroll.append(heading, list);
+    toolbar.setAttribute('aria-label', 'Document save actions');
+    toolbar.append(add, message, save);
+    panel.replaceChildren(scroll, toolbar);
+    let editorWidth = 0;
+    tab.editorResize = new ResizeObserver(() => {
+      const width = list.clientWidth;
+      if (!width || width === editorWidth) return;
+      editorWidth = width;
+      list.querySelectorAll('textarea').forEach(text => {
+        text.style.height = 'auto'; text.style.height = `${text.scrollHeight + 2}px`;
+      });
+    });
+    tab.editorResize.observe(list);
+
   } catch (error) {
     if (pdfTabs.get(fileHash) === tab) {
       status.textContent = error.message;
@@ -305,6 +396,10 @@ function renderDomainOptions() {
   $('domain').value = '';
 }
 async function selectDomain() {
+  if ($('domain').value !== state.key && [...pdfTabs.values()].some(tab => tab.isDirty?.())
+      && !confirm('Discard unsaved document changes and switch knowledge base?')) {
+    $('domain').value = state.key; return;
+  }
   const generation = state.generation;
   voice.cancel({ restore: false });
   clearPdfTabs();

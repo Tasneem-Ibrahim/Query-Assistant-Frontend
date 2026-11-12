@@ -148,7 +148,7 @@
   .nav .brand { font-size: 20px; letter-spacing: -.7px; gap: 9px; }
   .brand-icon, .brand-icon img { width: 40px; height: 40px; }
 }
-:is(.hero-actions .primary, #upload, #send, #confirm-permanent-delete) {
+:is(.hero-actions .primary, #upload, #send, #confirm-permanent-delete, .editor-toolbar .primary) {
   position: relative;
   isolation: isolate;
   overflow: hidden;
@@ -160,7 +160,7 @@
   box-shadow: inset 0 1px 0 #ffffff40, inset 0 -1px 0 #92bbff12, 0 6px 20px #06163240;
   transition: transform .25s ease, box-shadow .3s ease, border-color .3s ease, background .3s ease;
 }
-:is(.hero-actions .primary, #upload, #send, #confirm-permanent-delete)::before {
+:is(.hero-actions .primary, #upload, #send, #confirm-permanent-delete, .editor-toolbar .primary)::before {
   content: '';
   position: absolute;
   inset: 0;
@@ -169,13 +169,13 @@
   transform: translateX(-130%);
   transition: transform .65s ease;
 }
-:is(.hero-actions .primary, #upload, #send, #confirm-permanent-delete):not(:disabled):is(:hover, :focus-visible) {
+:is(.hero-actions .primary, #upload, #send, #confirm-permanent-delete, .editor-toolbar .primary):not(:disabled):is(:hover, :focus-visible) {
   transform: translateY(-3px);
   background: linear-gradient(135deg, #c0e1ff4d 0%, #5898ff55 45%, #345bc069 100%);
   border-color: #c4e3ffbb;
   box-shadow: inset 0 1px 0 #ffffff66, inset 0 -1px 0 #92bbff22, 0 10px 28px #367cff38, 0 0 18px #75b4ff18;
 }
-:is(.hero-actions .primary, #upload, #send, #confirm-permanent-delete):not(:disabled):is(:hover, :focus-visible)::before {
+:is(.hero-actions .primary, #upload, #send, #confirm-permanent-delete, .editor-toolbar .primary):not(:disabled):is(:hover, :focus-visible)::before {
   transform: translateX(130%);
 }
 :is(.hero-actions .primary, #upload) > span {
@@ -191,7 +191,7 @@
   border-radius: 9px;
   font-size: 22px;
 }
-:is(.hero-actions .primary, #upload, #send, #confirm-permanent-delete):not(:disabled):active {
+:is(.hero-actions .primary, #upload, #send, #confirm-permanent-delete, .editor-toolbar .primary):not(:disabled):active {
   transform: translateY(0) scale(.98);
   box-shadow: inset 0 2px 8px #07163440, 0 3px 12px #367cff20;
 }
@@ -200,9 +200,9 @@
   box-shadow: inset 0 1px 0 #ffffff20;
 }
 @media (prefers-reduced-motion: reduce) {
-  :is(.hero-actions .primary, #upload, #send, #confirm-permanent-delete):is(:hover, :focus-visible, :active),
+  :is(.hero-actions .primary, #upload, #send, #confirm-permanent-delete, .editor-toolbar .primary):is(:hover, :focus-visible, :active),
   :is(.hero-actions .primary, #upload) > span { transform: none; }
-  :is(.hero-actions .primary, #upload, #send, #confirm-permanent-delete)::before { display: none; }
+  :is(.hero-actions .primary, #upload, #send, #confirm-permanent-delete, .editor-toolbar .primary)::before { display: none; }
 }
 /* Admin credentials remain in memory only; the backend protects every API route. */
 .nav-actions { display: flex; align-items: center; gap: 20px; }
@@ -357,3 +357,112 @@
 }
 
 .chat-empty h4.clarity-quote { white-space: pre-line; line-height: 1.65; text-wrap: balance; }
+
+
+/* Give document review a comfortable reading rhythm. */
+.pdf-panel:has(.editor-chunks) {
+  overflow-y: auto;
+  padding: 32px;
+  max-height: 72dvh;
+  gap: 24px;
+  scrollbar-gutter: stable;
+}
+.pdf-panel:has(.editor-chunks) > * { flex-shrink: 0; }
+.editor-heading { padding-bottom: 4px; }
+.editor-eyebrow { color: #8ca9d3; font-size: 10px; font-weight: 600; letter-spacing: 1.8px; }
+.editor-heading h3 { margin: 12px 0; color: #eef3ff; font-family: Manrope, sans-serif; font-size: 23px; line-height: 1.45; overflow-wrap: anywhere; }
+.editor-help { margin: 0; color: #a6b8d4; font-size: 14px; line-height: 1.8; }
+.editor-explanation { margin-top: 14px; color: #94add2; font-size: 12px; line-height: 1.8; }
+.editor-explanation summary { cursor: pointer; width: fit-content; }
+.editor-explanation p { max-width: 60ch; margin: 12px 0 0; }
+.editor-toolbar { display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 16px; }
+.editor-toolbar .button { min-height: 44px; padding: 12px 18px; font-size: 12px; }
+.editor-status { margin: -8px 0 0; color: #a6b8d4; font-size: 12px; line-height: 1.8; }
+.editor-chunks { display: grid; gap: 26px; padding-bottom: 8px; }
+.editor-chunk { padding: 24px; border: 1px solid #7696c42e; border-radius: 16px; background: #0e192d; }
+.editor-chunk-header { display: flex; align-items: center; flex-wrap: wrap; gap: 14px 18px; margin-bottom: 22px; font-size: 12px; color: #a6b8d4; }
+.editor-chunk-number { margin-right: auto; color: #adc8ed; font-size: 10px; font-weight: 600; letter-spacing: 1.3px; }
+.editor-chunk-header label { display: inline-flex; align-items: center; gap: 8px; }
+.editor-chunk input { width: 60px; min-height: 38px; padding: 8px; border: 1px solid #7696c433; border-radius: 7px; background: #15233b; color: #eef3ff; }
+.editor-chunk-header .button { padding: 8px 10px; min-height: 38px; font-size: 11px; border-color: transparent; background: transparent; color: #b0bfd6; }
+.editor-chunk-header .button:hover { background: #ffffff08; border-color: #7696c433; }
+.editor-chunk textarea { display: block; width: 100%; resize: vertical; min-height: 220px; padding: 20px; border: 1px solid #7696c42e; border-radius: 10px; background: #081222; color: #e3edff; font: inherit; font-size: 14px; line-height: 1.9; }
+@media (max-width: 600px) {
+  .pdf-panel:has(.editor-chunks) { padding: 24px 18px; gap: 22px; }
+  .editor-heading h3 { font-size: 21px; }
+  .editor-chunk { padding: 18px; }
+  .editor-chunk-header { gap: 14px; margin-bottom: 18px; }
+  .editor-chunk-number { flex-basis: 100%; }
+  .editor-chunk-header .button { margin-left: auto; }
+  .editor-chunk textarea { padding: 16px; min-height: 240px; font-size: 15px; }
+  .editor-toolbar { gap: 12px; }
+  .editor-toolbar .button { flex: 1; padding-inline: 12px; }
+}
+
+
+/* The save bar stays outside the scrolling chunks, always within reach. */
+.pdf-panel:has(.editor-chunks) {
+  height: 72dvh;
+  min-height: 0;
+  padding: 0;
+  gap: 0;
+  overflow: hidden;
+  scrollbar-gutter: auto;
+}
+.pdf-panel:has(.editor-chunks) > .editor-scroll {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  scrollbar-gutter: stable;
+  padding: 32px;
+  display: flex;
+  flex-direction: column;
+  gap: 28px;
+  scroll-padding-block: 24px;
+}
+.editor-scroll > * { flex-shrink: 0; }
+.editor-toolbar {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 16px;
+  padding: 18px 24px;
+  border-top: 1px solid #7696c433;
+  background: #0e192d;
+  box-shadow: 0 -8px 24px #050b1a55;
+  z-index: 1;
+}
+.editor-toolbar .editor-status { margin: 0; overflow-wrap: anywhere; }
+.editor-toolbar .primary { white-space: nowrap; }
+@media (max-width: 600px) {
+  .pdf-panel:has(.editor-chunks) { padding: 0; gap: 0; }
+  .pdf-panel:has(.editor-chunks) > .editor-scroll { padding: 24px 18px; gap: 24px; }
+  .editor-toolbar { grid-template-columns: 1fr 1fr; gap: 12px; padding: 14px 18px; }
+  .editor-toolbar .editor-status { grid-column: 1 / -1; grid-row: 1; }
+  .editor-toolbar .button { width: 100%; padding-inline: 10px; font-size: 11px; }
+}
+
+
+/* One continuous document, with chunk headings rather than separate cards. */
+.editor-chunks { display: block; padding-bottom: 16px; }
+.editor-chunk { padding: 0; border: 0; border-radius: 0; background: transparent; box-shadow: none; }
+.editor-chunk + .editor-chunk { margin-top: 36px; padding-top: 28px; border-top: 1px solid #7696c424; }
+.editor-chunk-header { margin-bottom: 12px; }
+.editor-chunk-number { margin-block: 0; font-family: Manrope, sans-serif; font-size: 12px; line-height: 1.6; }
+.editor-chunk textarea {
+  min-height: 88px;
+  padding: 8px 2px;
+  border: 1px solid transparent;
+  border-radius: 4px;
+  background: transparent;
+  resize: none;
+  overflow: hidden;
+  line-height: 1.95;
+}
+.editor-chunk textarea:focus { outline: 1px solid #518aff66; outline-offset: 6px; }
+@media (max-width: 600px) {
+  .editor-chunk { padding: 0; }
+  .editor-chunk + .editor-chunk { margin-top: 28px; padding-top: 24px; }
+  .editor-chunk textarea { padding: 8px 2px; min-height: 88px; }
+}
