@@ -39,7 +39,6 @@ function controls() {
   $('send').disabled = unavailable || !state.status?.chunks || (!$('question').value.trim() && !voiceState.interim.trim());
   renderVoice();
   $('clear').disabled = state.busy;
-  $('connection').disabled = state.busy;
   document.querySelectorAll('.delete-document').forEach(button => { button.disabled = unavailable; });
   $('chat-mode').disabled = state.busy;
   $('search-mode').disabled = state.busy;
@@ -561,14 +560,6 @@ $('delete-domain').addEventListener('click', async () => {
   } catch (e) { if (generation === state.generation) notice(e.message); }
   finally { if (generation === state.generation) { state.busy = false; controls(); } }
 });
-$('connection').addEventListener('click', () => { $('api-url').value = base; $('settings').showModal(); });
-$('close-settings').addEventListener('click', () => $('settings').close());
-$('settings-form').addEventListener('submit', event => {
-  event.preventDefault(); const url = new URL($('api-url').value);
-  if (!['http:', 'https:'].includes(url.protocol) || url.username || url.password || url.search || url.hash) { $('api-url').setCustomValidity('Use an HTTP or HTTPS server URL without credentials, query, or fragment.'); $('api-url').reportValidity(); return; }
-  base = resolveBackendBase(location.hostname, location.origin, backendUrl, url.href.replace(/\/$/, '').replace(/\/api$/, '')); try { localStorage.setItem('pagewise-api', base); } catch {} $('settings').close(); resumeSession();
-});
-$('api-url').addEventListener('input', () => $('api-url').setCustomValidity(''));
 let editingDomain = null;
 function openDomainDialog(rename) {
   editingDomain = rename ? state.key : null;
@@ -628,7 +619,7 @@ function showLogin() {
   state.online = false; state.status = null; state.domains = []; state.key = '';
   state.busy = false; $('question').value = ''; $('logs').textContent = ''; $('processing').hidden = true;
   $('domain').replaceChildren(node('option', '', 'Select your knowledge base'));
-  for (const id of ['domain-dialog', 'settings', 'delete-document-dialog']) if ($(id).open) $(id).close();
+  for (const id of ['domain-dialog', 'delete-document-dialog']) if ($(id).open) $(id).close();
   $('domain-name').value = ''; $('account-name').textContent = ''; notice();
   $('chat-title').textContent = 'Document assistant';
   $('assistant-description').textContent = 'Select your knowledge base to get started, or create a new one.';
@@ -663,7 +654,6 @@ document.addEventListener('keydown', event => {
     menu.querySelector('summary').focus();
   }
 });
-$('login-connection').addEventListener('click', () => { $('api-url').value = base; $('settings').showModal(); });
 let signupMode = false;
 let adminMode = false;
 function authMode(signup, admin = false) {

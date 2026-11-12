@@ -57,7 +57,7 @@ export async function request(base, path, options = {}) {
     }
   } catch (error) {
     if (signal.aborted) throw error;
-    throw new Error(`Cannot reach the backend at ${base || location.origin}. Check Connection settings and the backend CORS_ORIGINS setting.`);
+    throw new Error(`Cannot reach the backend at ${base || location.origin}. Check backend availability and the backend CORS_ORIGINS setting.`);
   }
   if (!response.ok) {
     if (response.status === 401 && !['/auth/login', '/auth/admin/login', '/auth/signup'].includes(path) && typeof window !== 'undefined') {

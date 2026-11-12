@@ -41,7 +41,6 @@
       <button id="admin-auth-switch" class="text-link" type="button">Admin sign in</button>
       <button id="auth-switch" class="text-link" type="button">New here? Create an account</button>
       <p class="auth-session-note">Your session lasts up to 7 days. Access renews every 15 minutes.</p>
-      <button id="login-connection" class="text-link" type="button">Connection settings</button>
     </form>
   </div>
   <div id="admin-app" hidden inert>
@@ -93,7 +92,7 @@
           <button id="bundled" class="button secondary full" disabled>Use bundled documents</button>
           <div id="processing" class="processing" hidden><span class="field-label">PROCESSING ACTIVITY</span><pre id="logs" role="log" aria-live="polite"></pre></div>
           <section id="ocr-preview" class="ocr-preview" aria-labelledby="ocr-preview-title" hidden><div class="panel-title"><h3 id="ocr-preview-title">Extracted text</h3><button id="close-ocr-preview" class="icon-button" type="button" aria-label="Close extracted text">&#215;</button></div><p id="ocr-filename" class="selected-file"></p><span class="ocr-source-label">EXTRACTED FROM IMAGE</span><pre id="ocr-text" tabindex="0" aria-live="polite"></pre><p class="ocr-hint">Text read from your image. OCR may contain mistakes.</p></section>
-          <details class="advanced"><summary>Processing settings</summary><label><input type="checkbox" id="use-llm" checked> Use LLM normalization</label><label><input type="checkbox" id="force"> Reprocess existing PDF</label><label for="top-k">Retrieved passages <input type="number" id="top-k" value="5" min="1" max="20"></label><button class="button secondary full" id="connection" type="button">Connection settings</button><button id="reset" class="danger" disabled>Reset this knowledge base</button></details>
+          <details class="advanced"><summary>Processing settings</summary><label><input type="checkbox" id="use-llm" checked> Use LLM normalization</label><label><input type="checkbox" id="force"> Reprocess existing PDF</label><label for="top-k">Retrieved passages <input type="number" id="top-k" value="5" min="1" max="20"></label><button id="reset" class="danger" disabled>Reset this knowledge base</button></details>
           <div class="knowledge-footer"><span class="status-dot"></span><span id="chunk-count">No knowledge loaded</span><button id="refresh" title="Refresh document status" aria-label="Refresh document status">↻</button></div>
         </aside>
 
@@ -149,7 +148,6 @@
     <p id="welcome-error" role="alert" hidden></p>
     <div class="welcome-actions"><button type="button" id="welcome-create" class="button primary full">Create my knowledge base <span>↗</span></button><button type="button" id="welcome-later" class="text-link">I'll explore first</button></div>
   </dialog>
-  <dialog id="settings"><form id="settings-form"><div class="panel-title"><h3>Backend connection</h3><button type="button" class="icon-button" id="close-settings" aria-label="Close settings">×</button></div><p>Run the FastAPI bridge using <code>uvicorn api_server:app --port 8000</code>.</p><label class="field-label" for="api-url">API SERVER URL</label><input id="api-url" type="url" required placeholder="http://localhost:8000"><p class="settings-help">Local connections use port 3000, which your backend allows through CORS. No API keys belong in this frontend.</p><button class="button primary full" type="submit">Save & reconnect <span>↗</span></button></form></dialog>
   <script type="module" src="app.js"></script>
 </body>
 </html>
