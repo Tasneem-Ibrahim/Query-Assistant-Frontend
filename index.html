@@ -7,8 +7,9 @@
   <title>Query Assistant — Your documents. A world of answers.</title>
   <link rel="icon" type="image/svg+xml" href="assets/query-assistant-logo.svg">
   <link rel="stylesheet" href="styles.css">
+  <link rel="stylesheet" href="dashboard.css">
 </head>
-<body>
+<body class="landing-page">
   <div id="session-loading" class="session-loading" role="status">Loading your workspace…</div>
   <div id="login-gate" class="login-gate" hidden>
     <form id="login-form" class="login-card">
@@ -19,13 +20,13 @@
         <label class="field-label" for="user-name">YOUR NAME</label>
         <input id="user-name" name="name" autocomplete="name" maxlength="80" disabled>
       </div>
-      <label id="login-identity-label" class="field-label" for="user-email">EMAIL</label>
-      <input id="user-email" name="email" type="email" autocomplete="username" required maxlength="254">
+      <label id="login-identity-label" class="field-label" for="user-email">EMAIL OR USERNAME</label>
+      <input id="user-email" name="email" type="text" autocomplete="username" required maxlength="254">
       <label class="field-label" for="admin-password">PASSWORD</label>
       <div class="password-field">
         <input id="admin-password" name="password" type="password" autocomplete="current-password" required maxlength="256">
         <button id="toggle-password" class="password-toggle" type="button" aria-label="Show password" aria-controls="admin-password" aria-pressed="false" title="Show password">
-          <svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7S2 12 2 12Z"/><circle cx="12" cy="12" r="3"/><path class="eye-slash" d="m3 3 18 18" hidden/></svg>
+          Show
         </button>
       </div>
       <div id="confirm-password-field" hidden>
@@ -38,16 +39,28 @@
       <p id="auth-message" role="status" hidden></p>
       <p id="login-error" role="alert" hidden></p>
       <button id="login-submit" class="button primary full" type="submit">Sign in</button>
-      <button id="admin-auth-switch" class="text-link" type="button">Admin sign in</button>
       <button id="auth-switch" class="text-link" type="button">New here? Create an account</button>
       <p class="auth-session-note">Your session lasts up to 7 days. Access renews every 15 minutes.</p>
     </form>
   </div>
   <div id="admin-app" hidden inert>
+  <aside id="admin-sidebar" class="admin-sidebar" hidden aria-label="Admin navigation">
+    <a class="sidebar-brand" href="index.html" aria-label="Query Assistant home"><img src="assets/query-assistant-logo.svg" alt="" width="34" height="34"><div>Query Assistant <span>ADMIN WORKSPACE</span></div></a>
+    <button type="button" data-admin-page="home">Home</button>
+    <button type="button" data-admin-page="dashboard">Dashboard</button>
+    <div class="sidebar-group">USER MANAGEMENT</div>
+    <button type="button" data-admin-page="users">All users</button>
+    <button type="button" data-admin-page="requests">Upload requests <span id="admin-pending" class="count">0</span></button>
+    <p>Manage access.<br>Keep knowledge organized.</p>
+  </aside>
   <header class="nav shell">
-    <a class="brand" href="#" aria-label="Query Assistant"><span class="brand-icon" aria-hidden="true"><img src="assets/query-assistant-logo.svg" alt="" width="48" height="48"></span><span class="brand-name">Query <span>Assistant</span></span></a>
-    <nav aria-label="Main navigation"><a href="#workspace">Workspace</a><a href="#how-it-works">How it works</a></nav>
+    <div class="dashboard-heading"><span class="eyebrow">YOUR INTELLIGENCE WORKSPACE</span><h1 id="dashboard-page-title">Dashboard</h1></div>
+    <button id="admin-menu-toggle" class="button secondary" type="button" hidden aria-controls="admin-sidebar" aria-expanded="false">Menu</button>
+    <a class="brand" href="index.html" aria-label="Query Assistant home"><span class="brand-icon" aria-hidden="true"><img src="assets/query-assistant-logo.svg" alt="" width="48" height="48"></span><span class="brand-name">Query <span>Assistant</span></span></a>
+    <nav aria-label="Main navigation"><a href="workspace.html">Workspace</a></nav>
     <div class="nav-actions">
+      <a id="admin-dashboard-entry" class="button secondary" href="dashboard.html" hidden>Dashboard</a>
+      <button id="admin-bell" class="button secondary" type="button" hidden>Notifications (0)</button>
       <details id="admin-menu" class="admin-menu">
         <summary><span id="account-name">Account</span> <svg class="admin-chevron" viewBox="0 0 16 16" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true"><path d="m4 6 4 4 4-4"/></svg></summary>
         <div class="admin-dropdown"><button id="admin-logout" type="button">Sign out</button></div>
@@ -56,12 +69,19 @@
   </header>
 
   <main>
+    <section id="admin-overview" class="shell admin-overview" hidden aria-label="Dashboard overview">
+      <div><div class="eyebrow">ADMIN WORKSPACE</div><h1>Dashboard</h1><p>Your knowledge, with room to focus.</p></div>
+      <div class="admin-stats"><article class="panel"><span>Total users</span><strong id="admin-total-users">—</strong><small>Registered accounts</small></article><article class="panel"><span>Pending requests</span><strong id="admin-total-pending">—</strong><small>Awaiting your review</small></article></div>
+    </section>
+    <div id="admin-sync" class="shell admin-sync" hidden><button id="admin-refresh" class="button secondary" type="button">Refresh permissions</button><span id="admin-sync-status" role="status"></span></div>
+    <section id="admin-content" class="shell panel admin-content" hidden aria-label="User management"></section>
     <section class="hero shell" aria-labelledby="hero-title">
       <div class="hero-copy">
         <div class="eyebrow"><span class="spark">✦</span> YOUR KNOWLEDGE, CONNECTED <span class="tag">RAG POWERED</span></div>
-        <h1 id="hero-title">Your documents.<br>A world of <span class="gradient-text">answers.</span></h1>
-        <p>Turn your PDFs into conversations. Get clear answers backed by your documents.</p>
-        <div class="hero-actions"><a href="#workspace" class="button primary">Explore your knowledge <span>↗</span></a><a href="#how-it-works" class="text-link">See how it works <span>↓</span></a></div>
+        <h1 id="hero-title">Where Knowledge<br>Meets <span class="gradient-text">Intelligence.</span></h1>
+        <p>Transform the way you interact with your documents. Less searching. More discovering. Turn your documents into intelligent conversations with the power of AI. Explore information effortlessly, uncover meaningful insights, and get precise, source-backed answers in moments. Spend less time navigating endless pages and more time turning information into intelligence.</p>
+        <p><strong>Your Documents. Smarter Answers. Deeper Insights.</strong></p>
+        <div class="hero-actions"><a href="workspace.html" class="button primary">Explore your knowledge <span>↗</span></a></div>
         <div class="hero-notes"><span>✓ Page-level citations</span><span>✓ English & Roman Urdu</span></div>
       </div>
       <div class="hero-visual" aria-hidden="true">
@@ -89,8 +109,9 @@
           <p class="ocr-hint">Images: JPG, JPEG, PNG, JFIF, WebP, BMP, TIF, TIFF, AVIF.</p>
           <p id="selected-file" class="selected-file"></p>
           <button id="upload" class="button primary full" disabled>Upload & process <span>↗</span></button>
+          <section id="user-upload-status" class="user-upload-status" hidden aria-live="polite"></section>
           <button id="bundled" class="button secondary full" disabled>Use bundled documents</button>
-          <div id="processing" class="processing" hidden><span class="field-label">PROCESSING ACTIVITY</span><pre id="logs" role="log" aria-live="polite"></pre></div>
+          <div id="processing" class="processing" hidden><span id="processing-status" class="approval-badge processing-status" role="status">Processing</span><pre id="logs" role="log" aria-live="polite"></pre></div>
           <section id="ocr-preview" class="ocr-preview" aria-labelledby="ocr-preview-title" hidden><div class="panel-title"><h3 id="ocr-preview-title">Extracted text</h3><button id="close-ocr-preview" class="icon-button" type="button" aria-label="Close extracted text">&#215;</button></div><p id="ocr-filename" class="selected-file"></p><span class="ocr-source-label">EXTRACTED FROM IMAGE</span><pre id="ocr-text" tabindex="0" aria-live="polite"></pre><p class="ocr-hint">Text read from your image. OCR may contain mistakes.</p></section>
           <details class="advanced"><summary>Processing settings</summary><label><input type="checkbox" id="use-llm" checked> Use LLM normalization</label><label><input type="checkbox" id="force"> Reprocess existing PDF</label><label for="top-k">Retrieved passages <input type="number" id="top-k" value="5" min="1" max="20"></label><button id="reset" class="danger" disabled>Reset this knowledge base</button></details>
           <div class="knowledge-footer"><span class="status-dot"></span><span id="chunk-count">No knowledge loaded</span><button id="refresh" title="Refresh document status" aria-label="Refresh document status">↻</button></div>

@@ -8,7 +8,7 @@ const types = { '.html': 'text/html', '.css': 'text/css', '.js': 'text/javascrip
 http.createServer(async (req, res) => {
   try {
     const url = new URL(req.url, 'http://localhost');
-    const relative = decodeURIComponent(url.pathname === '/' ? '/index.html' : url.pathname);
+    const relative = decodeURIComponent(['/', '/workspace.html', '/dashboard.html'].includes(url.pathname) ? '/index.html' : url.pathname);
     const target = path.resolve(root, '.' + relative);
     if (!target.startsWith(root) || !['.html', '.css', '.js', '.png', '.svg'].includes(path.extname(target))) {
       res.writeHead(404).end('Not found'); return;

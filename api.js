@@ -114,9 +114,12 @@ export async function runJobs(base, key, jobs, onEvent, isCurrent = () => true) 
       if (!isCurrent()) return;
       result = await (await request(base, `/domains/${encodeURIComponent(key)}/documents/${encodeURIComponent(job.file_hash)}/step`, { method: 'POST' })).json();
       if (!isCurrent()) return;
+      if (result.status === 'paused') { if (result.message) onEvent({ type:'log', message:result.message }); return 'paused'; }
+      if (result.status === 'failed') { const error = new Error(result.message || 'Processing failed after the single retry.'); error.processingFailed = true; throw error; }
       if (!['pending', 'ready'].includes(result.status)) throw new Error('Unexpected document processing status. Resume saved documents to retry.');
       if (result.message) onEvent({ type: 'log', message: result.message });
     }
     onEvent({ type: 'done', report: { ...result.report, status: 'ingested' } });
   }
+  return 'ready';
 }

@@ -2,6 +2,8 @@ import { createVoiceInput } from './voice.js';
 import { request, readEvents, runJobs, resolveBackendBase, cancelWorkspaceRequests } from './api.js';
 import { backendUrl } from './config.js';
 import { createWorkspaceGuide } from './onboarding.js';
+import { createAdminPanel } from './admin-panel.js';
+import { createSavedProcessor } from './saved-processing.js';
 
 // Supabase email links can redirect with tokens in the fragment. Sign in through
 // the cookie endpoint instead, and remove those credentials from browser history.
@@ -15,6 +17,37 @@ let savedBase = '';
 try { savedBase = localStorage.getItem('pagewise-api') || ''; } catch { /* Storage may be unavailable. */ }
 let base = resolveBackendBase(location.hostname, location.origin, backendUrl, savedBase);
 const state = { domains: [], key: '', status: null, online: false, busy: false, mode: 'chat', histories: {}, results: {}, file: null, generation: 0, user: null };
+const savedProcessor = createSavedProcessor({
+  canRun: () => state.user?.role === 'user' && document.body.classList.contains('workspace-page') && state.online && !state.busy && ![...pdfTabs.values()].some(tab => tab.isDirty?.()),
+  onStart: row => {
+    state.busy = true; controls(); $('processing').hidden = false;
+    $('processing-status').textContent = 'Processing'; $('processing-status').className = 'approval-badge processing-status';
+    $('logs').textContent = `Processing saved file: ${row.filename}\n`;
+  },
+  process: (row, current) => runJobs(base, row.domain, [{ file_hash:row.file_hash, status:'pending' }], event => {
+    if (!current()) return;
+    if (event.message) $('logs').append(document.createTextNode(event.message + '\n'));
+    if (event.type === 'done') { $('processing-status').textContent = 'Ready'; $('processing-status').className = 'approval-badge approved'; }
+  }, current),
+  onError: error => { notice(error.message); $('processing-status').textContent = error.processingFailed ? 'Failed' : 'Paused'; $('processing-status').className = error.processingFailed ? 'approval-badge rejected' : 'approval-badge processing-status'; },
+  onFinish: async (row, result, current) => {
+    if (result === 'paused') $('processing-status').textContent = 'Paused';
+    await adminPanel.refresh();
+    if (current()) {
+      state.busy = false;
+      try { await refreshApprovedDocuments(result === 'ready' ? [row] : []); }
+      catch (error) { if (current()) notice(error.message); }
+      if (current()) controls();
+    }
+  }
+});
+const adminPanel = createAdminPanel({ user: () => state.user, onError: message => notice(message),
+  sendUpload: data => request(base, '/uploads', { method:'POST', body:data }).then(response => response.json()),
+  onReady: rows => refreshApprovedDocuments(rows).catch(error => notice(error.message)),
+  onApprovedUploads: rows => savedProcessor.enqueue(rows),
+  onViewPdf: row => viewOriginalPdf(row),
+  confirmRemoveCard: row => confirmDeletion('Delete upload card?', `Remove the card for "${row.filename}" from your request list? Your PDF, processing and the admin record remain saved.`, 'Delete card'),
+  api: async (path, body, method = 'GET') => (await request(base, path, body ? { method, headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) } : {})).json() });
 const guide = createWorkspaceGuide({
   dialog: $('welcome-guide'), close: $('close-welcome'), later: $('welcome-later'),
   start: $('welcome-create'), error: $('welcome-error'),
@@ -26,12 +59,14 @@ const history = () => state.histories[state.key] ||= [];
 function node(tag, className, text) { const el = document.createElement(tag); if (className) el.className = className; if (text !== undefined) el.textContent = text; return el; }
 function notice(message = '') { $('notice').textContent = message; $('notice').hidden = !message; }
 function controls() {
+  savedProcessor.kick();
   const unavailable = !state.online || state.busy;
   for (const id of ['domain', 'bundled', 'refresh', 'reset', 'new-domain', 'rename-domain', 'delete-domain']) $(id).disabled = unavailable;
   $('delete-domain').disabled = unavailable || !state.domains.find(d => d.key === state.key)?.custom;
   for (const id of ['pdf', 'bundled', 'refresh', 'reset', 'rename-domain']) $(id).disabled = unavailable || !state.key;
-  document.querySelectorAll('.view-image-text, .view-pdf').forEach(button => { button.disabled = unavailable; });
+  document.querySelectorAll('.view-image-text, .view-pdf').forEach(button => { button.disabled = unavailable || button.dataset.ready === 'false'; });
   $('upload').disabled = unavailable || !state.key || !state.file;
+  const uploadNote = $('upload-request-message'); if (uploadNote) uploadNote.disabled = $('upload').disabled;
   $('question').disabled = unavailable || !state.status?.chunks;
   if (unavailable || !state.status?.chunks) voice.pause('Paused while the workspace is unavailable. Resume when ready.');
   const voiceState = voice.snapshot();
@@ -62,6 +97,9 @@ function renderMessages() {
   if (!state.key) {
     const empty = node('div', 'chat-empty');
     const fresh = state.online && !state.domains.length;
+    if (document.body.classList.contains('workspace-page')) {
+      const icon = node('div', 'empty-symbol ai-empty-icon', '✦'); icon.setAttribute('aria-hidden', 'true'); empty.append(icon);
+    }
     empty.append(node('h4', '', fresh ? 'Your workspace starts here.' : 'Select your knowledge base'), node('p', '', fresh ? 'Create your first knowledge base, then upload a PDF or image to start exploring your documents.' : 'Choose a knowledge base from the dropdown to view your documents and start asking questions.'));
     if (fresh) {
       const create = node('button', 'button secondary', '+ Create knowledge base');
@@ -74,12 +112,15 @@ function renderMessages() {
   const messages = state.mode === 'chat' ? history() : (state.results[state.key] || []);
   if (!messages.length) {
     const empty = node('div', 'chat-empty');
-    empty.append(node('div', 'empty-symbol', state.mode === 'chat' ? '✦' : '⌕'), node('h4', state.mode === 'chat' ? 'clarity-quote' : '', state.mode === 'chat' ? 'From Questions to Clarity,\nFrom Data to Insights' : 'Find the passage you need.'));
+    empty.append(node('div', 'empty-symbol ai-empty-icon', state.mode === 'chat' ? '✦' : '⌕'), node('h4', state.mode === 'chat' ? 'clarity-quote' : '', state.mode === 'chat' ? 'From Questions to Clarity,\nFrom Data to Insights' : 'Find the passage you need.'));
     const domain = state.domains.find(d => d.key === state.key);
     empty.append(node('p', '', state.mode === 'search' ? 'Find relevant excerpts in your documents.' : domain?.welcome || 'Connect your backend and add a PDF to get started.'));
-    if (domain?.examples?.length) {
+    const defaultSuggestions = ['What are the key takeaways from these documents?', 'Summarize the main ideas in this knowledge base.', 'Which details are most important to understand?', 'What conclusions are supported by these documents?'];
+    const suggestions = state.status?.chunks && state.mode === 'chat'
+      ? [...new Set([...(domain?.examples || []), ...defaultSuggestions])].slice(0, 4) : [];
+    if (suggestions.length) {
       const examples = node('div', 'examples');
-      for (const text of domain.examples) {
+      for (const text of suggestions) {
         const button = node('button', 'example'); button.type = 'button'; button.append(node('div', '', text), node('span', '', '↗'));
         button.addEventListener('click', () => { $('question').value = text; controls(); if (!$('question').disabled) $('question').focus(); else notice('Process an uploaded PDF or image or use the bundled documents to get started.'); });
         examples.append(button);
@@ -118,9 +159,11 @@ function renderStatus() {
       view.addEventListener('click', () => showImageText(fileHash));
       info.append(view);
     }
-    if (/\.pdf$/i.test(file.name)) {
-      const view = node('button', 'view-pdf', 'View / edit chunks');
+    if (/\.pdf$/i.test(file.name) || isImage) {
+      const view = node('button', 'view-pdf', 'View document');
       view.type = 'button'; view.setAttribute('aria-label', `View and edit processed chunks: ${file.name}`);
+      view.dataset.ready = state.status?.pending_files?.[fileHash] ? 'false' : 'true';
+      view.title = view.dataset.ready === 'false' ? 'Available after processing finishes.' : 'View and edit the cleaned, normalized content used for search and answers.';
       view.addEventListener('click', () => openPdf(fileHash, file.name));
       info.append(view);
     }
@@ -169,6 +212,40 @@ document.addEventListener('visibilitychange', () => {
   if (document.hidden) voice.pause('Paused while you are away. Select Resume to continue.');
 });
 const pdfTabs = new Map();
+const originalPdfDialog = document.createElement('dialog'); originalPdfDialog.id = 'original-pdf-dialog';
+originalPdfDialog.setAttribute('aria-labelledby', 'original-pdf-title');
+const originalPdfHeader = node('div', 'original-pdf-header');
+const originalPdfTitle = node('h3', '', 'PDF preview'); originalPdfTitle.id = 'original-pdf-title';
+const originalPdfClose = node('button', 'button secondary', 'Close'); originalPdfClose.type = 'button';
+originalPdfClose.addEventListener('click', () => originalPdfDialog.close());
+originalPdfHeader.append(originalPdfTitle, originalPdfClose);
+const originalPdfStatus = node('p'); originalPdfStatus.setAttribute('role', 'status');
+const originalPdfFrame = document.createElement('iframe'); originalPdfFrame.title = 'Your original PDF';
+const originalPdfLink = node('a', 'text-link', 'Open PDF in a new tab'); originalPdfLink.target = '_blank'; originalPdfLink.rel = 'noopener'; originalPdfLink.hidden = true;
+originalPdfDialog.append(originalPdfHeader, originalPdfStatus, originalPdfFrame, originalPdfLink); document.body.append(originalPdfDialog);
+let originalPdfUrl = null, originalPdfSequence = 0;
+function clearOriginalPdfPreview() {
+  ++originalPdfSequence; originalPdfFrame.src = 'about:blank'; originalPdfLink.removeAttribute('href'); originalPdfLink.hidden = true;
+  if (originalPdfUrl) URL.revokeObjectURL(originalPdfUrl); originalPdfUrl = null;
+}
+originalPdfDialog.addEventListener('close', () => { if (!originalPdfDialog.open) clearOriginalPdfPreview(); });
+async function viewOriginalPdf(row) {
+  if (originalPdfDialog.open) originalPdfDialog.close();
+  clearOriginalPdfPreview();
+  const sequence = ++originalPdfSequence, generation = state.generation;
+  originalPdfTitle.textContent = row.filename; originalPdfStatus.textContent = 'Loading your PDF…';
+  originalPdfFrame.src = 'about:blank'; originalPdfLink.hidden = true; originalPdfDialog.showModal();
+  try {
+    const response = await request(base, `/domains/${encodeURIComponent(row.domain)}/documents/${encodeURIComponent(row.file_hash)}/pdf`);
+    const blob = await response.blob();
+    if (generation !== state.generation || sequence !== originalPdfSequence || !originalPdfDialog.open) return;
+    if (!blob.type.includes('application/pdf')) throw new Error('The PDF preview is unavailable.');
+    originalPdfUrl = URL.createObjectURL(blob); originalPdfFrame.src = originalPdfUrl;
+    originalPdfLink.href = originalPdfUrl; originalPdfLink.hidden = false; originalPdfStatus.textContent = '';
+  } catch (error) {
+    if (generation === state.generation && sequence === originalPdfSequence && originalPdfDialog.open) originalPdfStatus.textContent = error.message;
+  }
+}
 window.addEventListener('beforeunload', event => {
   if ([...pdfTabs.values()].some(tab => tab.isDirty?.())) { event.preventDefault(); event.returnValue = ''; }
 });
@@ -355,13 +432,28 @@ async function refresh() {
   const key = state.key, generation = state.generation;
   state.status = null; controls();
   try { const result = await json(`/domains/${encodeURIComponent(key)}/status`); if (key === state.key && generation === state.generation) state.status = result; }
-  finally { if (generation === state.generation) renderStatus(); }
+  finally {
+    if (generation === state.generation) {
+      renderStatus();
+      const messages = state.mode === 'chat' ? history() : (state.results[state.key] || []);
+      if (!messages.length) renderMessages();
+    }
+  }
 }
-function confirmDeletion(title, description) {
+async function refreshApprovedDocuments(rows = []) {
+  if (!document.body.classList.contains('workspace-page')) return;
+  if (!state.key && !state.busy && !state.file) {
+    const ready = rows.find(row => state.domains.some(domain => domain.key === row.domain));
+    if (ready) { $('domain').value = ready.domain; await selectDomain(); return; }
+  }
+  await refresh();
+}
+function confirmDeletion(title, description, actionLabel = 'Permanently delete') {
   const dialog = $('delete-document-dialog');
   if (dialog.open) return Promise.resolve(false);
   $('delete-document-title').textContent = title;
   $('delete-document-description').textContent = description;
+  $('confirm-permanent-delete').textContent = actionLabel;
   dialog.returnValue = 'cancel';
   return new Promise(resolve => {
     dialog.addEventListener('close', () => resolve(dialog.returnValue === 'delete'), { once: true });
@@ -404,6 +496,7 @@ async function selectDomain() {
   clearPdfTabs();
   clearImageText();
   state.key = $('domain').value; state.file = null; $('pdf').value = ''; $('selected-file').textContent = ''; $('question').value = ''; $('processing').hidden = true; notice();
+  adminPanel.fileChanged(null, state.key);
   const domain = state.domains.find(d => d.key === state.key);
   if (!domain) {
     state.key = ''; state.status = null;
@@ -439,7 +532,7 @@ async function connect() {
     renderDomainOptions();
     await selectDomain();
     if (generation !== state.generation) return;
-    guide.show(state.user, state.domains);
+    if (!document.body.classList.contains('landing-page')) guide.show(state.user, state.domains);
     if (!health.deepseek_key) notice('Backend connected. Set DEEPSEEK_API_KEY in the backend .env to generate answers. You can still process PDFs and search passages.');
   } catch (e) {
     if (generation !== state.generation) return;
@@ -453,16 +546,30 @@ function chooseFile(file) {
   if (file.size > 4000000) { notice('Choose a PDF or image smaller than 4 MB.'); return; }
   clearImageText();
   state.file = file; $('selected-file').textContent = `${file.name} · ${(file.size / 1024 / 1024).toFixed(2)} MB`; notice(); controls();
+  adminPanel.fileChanged(file, state.key);
 }
 async function ingest(bundled) {
   if (state.busy || !state.online || !state.key) return;
   const key = state.key, generation = state.generation;
   const imageName = !bundled && /\.(jpe?g|png|jfif|webp|bmp|tiff?|avif)$/i.test(state.file?.name || '') ? state.file.name.replace(/[^A-Za-z0-9._-]+/g, '_') : null;
   clearImageText();
-  state.busy = true; controls(); notice(); $('processing').hidden = false; $('logs').textContent = 'Starting document processing…\n';
+  state.busy = true; controls(); notice(); $('processing').hidden = true; $('logs').textContent = 'Starting document processing…\n';
+  let processingStarted = false;
   const data = new FormData(); if (!bundled) data.append('file', state.file);
   data.append('force', $('force').checked); data.append('use_llm', $('use-llm').checked);
   try {
+    if (!bundled) {
+      const prepared = await adminPanel.prepare(state.file, key, $('use-llm').checked);
+      if (generation !== state.generation || !prepared) return;
+      if (prepared !== true) {
+        state.file = null; $('pdf').value = ''; $('selected-file').textContent = '';
+        notice(prepared.job_message || 'Your file is saved. Track its status below; no re-upload is needed.');
+        return;
+      }
+    }
+    if (generation !== state.generation) return;
+    processingStarted = true; $('processing').hidden = false;
+    $('processing-status').textContent = 'Processing'; $('processing-status').className = 'approval-badge processing-status';
     const response = await request(base, `/domains/${encodeURIComponent(key)}/ingest`, { method: 'POST', body: data });
     if (generation !== state.generation) return;
     const onEvent = event => {
@@ -477,7 +584,8 @@ async function ingest(bundled) {
     } else await readEvents(response, onEvent);
     if (generation !== state.generation) return;
     state.file = null; $('pdf').value = ''; $('selected-file').textContent = ''; notice('Your knowledge is ready. Ask a question or search the passages.');
-  } catch (e) { if (generation === state.generation) notice(e.message); }
+    $('processing-status').textContent = 'Ready'; $('processing-status').className = 'approval-badge approved';
+  } catch (e) { if (generation === state.generation) { notice(e.message); if (processingStarted) { $('processing-status').textContent = 'Failed'; $('processing-status').className = 'approval-badge rejected'; } } }
   finally {
     if (generation !== state.generation) return;
     try {
@@ -594,7 +702,7 @@ $('domain-form').addEventListener('submit', async event => {
   } catch (e) { if (generation === state.generation) { $('domain-error').textContent = e.message; $('domain-error').hidden = false; } }
   finally { if (generation === state.generation) { state.busy = false; controls(); } $('save-domain').disabled = false; $('close-domain').disabled = false; }
 });
-function chooseFileAfterCreate(file) { state.file = file; $('selected-file').textContent = `${file.name} · ${(file.size / 1024 / 1024).toFixed(2)} MB`; }
+function chooseFileAfterCreate(file) { state.file = file; $('selected-file').textContent = `${file.name} · ${(file.size / 1024 / 1024).toFixed(2)} MB`; adminPanel.fileChanged(file, state.key); }
 $('domain-name').addEventListener('input', () => $('domain-name').setCustomValidity(''));
 function setPasswordVisible(visible) {
   $('admin-password').type = visible ? 'text' : 'password';
@@ -602,12 +710,15 @@ function setPasswordVisible(visible) {
   button.setAttribute('aria-pressed', String(visible));
   button.setAttribute('aria-label', visible ? 'Hide password' : 'Show password');
   button.title = visible ? 'Hide password' : 'Show password';
-  button.querySelector('.eye-slash').toggleAttribute('hidden', !visible);
+  button.textContent = visible ? 'Hide' : 'Show';
 }
 $('toggle-password').addEventListener('click', () => {
   setPasswordVisible($('admin-password').type === 'password');
 });
 function showLogin() {
+  savedProcessor.reset();
+  if (originalPdfDialog.open) originalPdfDialog.close();
+  adminPanel.reset();
   guide.reset();
   state.user = null;
   cancelWorkspaceRequests();
@@ -655,19 +766,15 @@ document.addEventListener('keydown', event => {
   }
 });
 let signupMode = false;
-let adminMode = false;
-function authMode(signup, admin = false) {
+function authMode(signup) {
   signupMode = signup;
-  adminMode = admin;
-  $('user-email').type = admin ? 'text' : 'email';
-  $('user-email').maxLength = admin ? 80 : 254;
+  $('user-email').type = signup ? 'email' : 'text';
+  $('user-email').maxLength = 254;
   $('user-email').value = '';
-  $('login-identity-label').textContent = admin ? 'ADMIN USERNAME' : 'EMAIL';
-  $('admin-auth-switch').textContent = admin ? 'User sign in' : 'Admin sign in';
-  $('auth-switch').hidden = admin;
+  $('login-identity-label').textContent = signup ? 'EMAIL' : 'EMAIL OR USERNAME';
 
-  $('auth-title').textContent = admin ? 'Admin sign in' : signup ? 'Create your account' : 'Welcome back';
-  $('auth-description').textContent = admin ? 'Use your existing admin username and password.' : signup ? 'Sign up to start asking questions about your documents.' : 'Sign in to access your knowledge bases and documents.';
+  $('auth-title').textContent = signup ? 'Create your account' : 'Welcome back';
+  $('auth-description').textContent = signup ? 'Sign up to start asking questions about your documents.' : 'Sign in to access your knowledge bases and documents.';
   $('signup-name-field').hidden = !signup;
   $('confirm-password-field').hidden = !signup;
   for (const id of ['user-name', 'confirm-password']) {
@@ -687,7 +794,6 @@ function authMode(signup, admin = false) {
   setPasswordVisible(false);
 }
 $('auth-switch').addEventListener('click', () => authMode(!signupMode));
-$('admin-auth-switch').addEventListener('click', () => authMode(false, !adminMode));
 $('toggle-confirm-password').addEventListener('click', () => {
   const visible = $('confirm-password').type === 'password';
   $('confirm-password').type = visible ? 'text' : 'password';
@@ -708,6 +814,7 @@ async function openWorkspace(user) {
   $('login-gate').hidden = true;
   $('admin-app').hidden = false; $('admin-app').inert = false;
   await connect();
+  if (state.user === user) await adminPanel.start();
 }
 $('login-form').addEventListener('submit', async event => {
   event.preventDefault();
@@ -716,12 +823,12 @@ $('login-form').addEventListener('submit', async event => {
     $('confirm-password').setCustomValidity('Passwords do not match.');
     $('confirm-password').reportValidity(); return;
   }
-  $('login-submit').disabled = true; $('auth-switch').disabled = true; $('admin-auth-switch').disabled = true;
+  $('login-submit').disabled = true; $('auth-switch').disabled = true;
   $('login-error').hidden = true; $('auth-message').hidden = true;
   try {
-    const body = { [adminMode ? 'username' : 'email']: $('user-email').value.trim(), password: $('admin-password').value };
+    const body = { [signupMode ? 'email' : 'identity']: $('user-email').value.trim(), password: $('admin-password').value };
     if (signupMode) body.name = $('user-name').value.trim();
-    const data = await json(adminMode ? '/auth/admin/login' : signupMode ? '/auth/signup' : '/auth/login', body);
+    const data = await json(signupMode ? '/auth/signup' : '/auth/login', body);
     if (generation !== state.generation) return;
     if (data.confirmation_required) {
       const email = body.email;
@@ -730,11 +837,11 @@ $('login-form').addEventListener('submit', async event => {
       $('auth-message').textContent = data.message; $('auth-message').hidden = false;
     } else {
       authChanges?.postMessage('session-changed');
-      await openWorkspace(data.user);
+      window.location.replace('index.html');
     }
   } catch (error) {
     if (generation === state.generation) { $('login-error').textContent = error.message; $('login-error').hidden = false; }
-  } finally { $('login-submit').disabled = false; $('auth-switch').disabled = false; $('admin-auth-switch').disabled = false; }
+  } finally { $('login-submit').disabled = false; $('auth-switch').disabled = false; }
 });
 renderMessages();
 async function resumeSession() {
