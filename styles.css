@@ -148,7 +148,7 @@
   .nav .brand { font-size: 20px; letter-spacing: -.7px; gap: 9px; }
   .brand-icon, .brand-icon img { width: 40px; height: 40px; }
 }
-:is(.hero-actions .primary, #upload, #send, #confirm-permanent-delete, .editor-toolbar .primary) {
+:is(.hero-actions .primary, #upload, #send, #confirm-permanent-delete, .editor-toolbar .primary, #login-submit) {
   position: relative;
   isolation: isolate;
   overflow: hidden;
@@ -160,7 +160,7 @@
   box-shadow: inset 0 1px 0 #ffffff40, inset 0 -1px 0 #92bbff12, 0 6px 20px #06163240;
   transition: transform .25s ease, box-shadow .3s ease, border-color .3s ease, background .3s ease;
 }
-:is(.hero-actions .primary, #upload, #send, #confirm-permanent-delete, .editor-toolbar .primary)::before {
+:is(.hero-actions .primary, #upload, #send, #confirm-permanent-delete, .editor-toolbar .primary, #login-submit)::before {
   content: '';
   position: absolute;
   inset: 0;
@@ -169,13 +169,13 @@
   transform: translateX(-130%);
   transition: transform .65s ease;
 }
-:is(.hero-actions .primary, #upload, #send, #confirm-permanent-delete, .editor-toolbar .primary):not(:disabled):is(:hover, :focus-visible) {
+:is(.hero-actions .primary, #upload, #send, #confirm-permanent-delete, .editor-toolbar .primary, #login-submit):not(:disabled):is(:hover, :focus-visible) {
   transform: translateY(-3px);
   background: linear-gradient(135deg, #c0e1ff4d 0%, #5898ff55 45%, #345bc069 100%);
   border-color: #c4e3ffbb;
   box-shadow: inset 0 1px 0 #ffffff66, inset 0 -1px 0 #92bbff22, 0 10px 28px #367cff38, 0 0 18px #75b4ff18;
 }
-:is(.hero-actions .primary, #upload, #send, #confirm-permanent-delete, .editor-toolbar .primary):not(:disabled):is(:hover, :focus-visible)::before {
+:is(.hero-actions .primary, #upload, #send, #confirm-permanent-delete, .editor-toolbar .primary, #login-submit):not(:disabled):is(:hover, :focus-visible)::before {
   transform: translateX(130%);
 }
 :is(.hero-actions .primary, #upload) > span {
@@ -191,7 +191,7 @@
   border-radius: 9px;
   font-size: 22px;
 }
-:is(.hero-actions .primary, #upload, #send, #confirm-permanent-delete, .editor-toolbar .primary):not(:disabled):active {
+:is(.hero-actions .primary, #upload, #send, #confirm-permanent-delete, .editor-toolbar .primary, #login-submit):not(:disabled):active {
   transform: translateY(0) scale(.98);
   box-shadow: inset 0 2px 8px #07163440, 0 3px 12px #367cff20;
 }
@@ -200,9 +200,9 @@
   box-shadow: inset 0 1px 0 #ffffff20;
 }
 @media (prefers-reduced-motion: reduce) {
-  :is(.hero-actions .primary, #upload, #send, #confirm-permanent-delete, .editor-toolbar .primary):is(:hover, :focus-visible, :active),
+  :is(.hero-actions .primary, #upload, #send, #confirm-permanent-delete, .editor-toolbar .primary, #login-submit):is(:hover, :focus-visible, :active),
   :is(.hero-actions .primary, #upload) > span { transform: none; }
-  :is(.hero-actions .primary, #upload, #send, #confirm-permanent-delete, .editor-toolbar .primary)::before { display: none; }
+  :is(.hero-actions .primary, #upload, #send, #confirm-permanent-delete, .editor-toolbar .primary, #login-submit)::before { display: none; }
 }
 /* Admin credentials remain in memory only; the backend protects every API route. */
 .nav-actions { display: flex; align-items: center; gap: 20px; }
