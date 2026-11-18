@@ -1,20 +1,13 @@
 /* Presentation only. Every dashboard rule is scoped away from the landing page. */
+body.workspace-page { background-attachment:fixed; }
 body.workspace-page::before {
+  position:fixed;
   height:clamp(700px,100svh,950px);
   background-position:center top,62% top;
   mask-image:linear-gradient(90deg,#000c,#000 55%);
 }
 @media (max-width:767px) {
   body.workspace-page::before { background-position:center top,70% top; }
-}
-/* Lower wallpaper trial for the dashboard overview. */
-body.workspace-page:has(#admin-overview:not([hidden])) {
-  --wallpaper-continuation: center clamp(520px,75svh,710px) / 100% clamp(620px,95svh,1050px) no-repeat;
-  background:
-    radial-gradient(ellipse at 85% 55%,#10244725,transparent 50%),
-    linear-gradient(180deg,var(--bg),#050b1adc 42%,#050b1af2 76%,var(--bg)) var(--wallpaper-continuation),
-    var(--page-wallpaper) var(--wallpaper-continuation),
-    var(--bg);
 }
 body.workspace-page:has(#admin-overview:not([hidden])) .chat {
   background:radial-gradient(ellipse at 90% 30%,#050b1a40,transparent 58%),
@@ -180,11 +173,8 @@ body:is(.admin-layout,.workspace-page) .documents { margin:12px 0 18px; }
 body:is(.admin-layout,.workspace-page) .empty-documents { padding:20px 14px; background:var(--dash-field); border:1px dashed var(--dash-border); border-radius:12px; color:var(--dash-muted); font-size:14px; line-height:1.8; text-align:center; }
 body:is(.admin-layout,.workspace-page) .upload-zone { background:#9fbbf00b; border:1px solid #a6c4ff45; border-radius:16px; padding:26px 14px; transition:background 180ms,border-color 180ms,box-shadow 180ms; }
 body:is(.admin-layout,.workspace-page) .knowledge .upload-zone:is(:hover,.dragover) {
-  background:linear-gradient(135deg,#c0e1ff24 0%,#5898ff2c 45%,#345bc041 100%);
-  border-color:#afd5ff70;
-  -webkit-backdrop-filter:blur(18px) saturate(160%);
-  backdrop-filter:blur(18px) saturate(160%);
-  box-shadow:inset 0 1px 0 #ffffff32,inset 0 -1px 0 #92bbff12,0 6px 20px #06163240;
+  background:color-mix(in srgb,var(--bg) 94%,transparent);
+  border-color:#a6c4ff45;
 }
 body:is(.admin-layout,.workspace-page) .upload-zone strong { font-size:15px; font-weight:650; }
 body:is(.admin-layout,.workspace-page) .upload-zone > span:last-of-type { font-size:13px; line-height:1.6; color:var(--dash-muted); }
@@ -465,10 +455,6 @@ body.workspace-page .knowledge .upload-zone {
   background:linear-gradient(135deg,#a6c4ff15,#a6c4ff04);
   text-align:center;
 }
-body.workspace-page .knowledge .upload-zone:is(:hover,.dragover) .upload-symbol {
-  background:#a8ccff1a;
-  box-shadow:inset 0 1px 0 #ffffff24;
-}
 body.workspace-page .knowledge .upload-symbol {
   width:38px;
   height:38px;
@@ -476,7 +462,6 @@ body.workspace-page .knowledge .upload-symbol {
   display:grid;
   place-items:center;
   color:var(--brand-ice);
-  transition:background 180ms,box-shadow 180ms;
 }
 body.workspace-page .chat-header { background:#8bb3ff08; }
 body.workspace-page .chat-tabs { background:#8bb3ff05; }

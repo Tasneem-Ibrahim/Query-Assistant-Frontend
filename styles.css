@@ -178,9 +178,21 @@ body.workspace-page .upload-zone::before {
   border-color: #c4e3ffbb;
   box-shadow: inset 0 1px 0 #ffffff66, inset 0 -1px 0 #92bbff22, 0 10px 28px #367cff38, 0 0 18px #75b4ff18;
 }
-:is(.hero-actions .primary, #upload, #send, #confirm-permanent-delete, .editor-toolbar .primary, #login-submit):not(:disabled):is(:hover, :focus-visible)::before,
-body.workspace-page .upload-zone:is(:hover, .dragover, :has(input:focus-visible))::before {
+:is(.hero-actions .primary, #upload, #send, #confirm-permanent-delete, .editor-toolbar .primary, #login-submit):not(:disabled):is(:hover, :focus-visible)::before {
   transform: translateX(130%);
+}
+body.workspace-page .upload-zone::before {
+  background: linear-gradient(110deg, transparent 25%, #a6c4ff20 50%, transparent 75%);
+  transition: none;
+}
+@media (prefers-reduced-motion: no-preference) {
+  body.workspace-page .upload-zone:is(:hover, .dragover, :has(input:focus-visible))::before {
+    animation: upload-zone-sheen .65s ease 1;
+  }
+}
+@keyframes upload-zone-sheen {
+  from { transform: translateX(-130%); }
+  to { transform: translateX(130%); }
 }
 :is(.hero-actions .primary, #upload) > span {
   display: inline-block;
