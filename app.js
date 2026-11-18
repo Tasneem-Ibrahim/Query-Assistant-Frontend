@@ -153,13 +153,15 @@ function renderStatus() {
   for (const [fileHash, file] of files) {
     const item = node('div', 'document'); const info = node('div', 'document-info');
     const title = node('strong', '', file.name); title.title = file.name;
-    info.append(title, node('small', '', state.status?.pending_files?.[fileHash] ? `${file.pages} pages · Processing incomplete` : `${file.pages} pages · ${file.chunks} passages`));
     const remove = node('button', 'delete-document');
     remove.type = 'button'; remove.title = `Delete ${file.name}`;
     remove.setAttribute('aria-label', `Delete ${file.name}`);
     remove.innerHTML = '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 6h18M9 6V4h6v2M5 6l1 14h12l1-14M10 10v6M14 10v6"/></svg>';
     remove.append(document.createTextNode('Delete'));
     remove.addEventListener('click', () => deleteDocument(fileHash, file.name));
+    const heading = node('div', 'document-title-row');
+    heading.append(title, remove);
+    info.append(heading, node('small', '', state.status?.pending_files?.[fileHash] ? `${file.pages} pages · Processing incomplete` : `${file.pages} pages · ${file.chunks} passages`));
     const isImage = /\.(jpe?g|png|jfif|webp|bmp|tiff?|avif)$/i.test(file.name);
     if (isImage && !state.status?.pending_files?.[fileHash]) {
       const view = node('button', 'view-image-text', 'View text');
@@ -168,14 +170,14 @@ function renderStatus() {
       info.append(view);
     }
     if (/\.pdf$/i.test(file.name) || isImage) {
-      const view = node('button', 'view-pdf', 'View document');
+      const view = node('button', 'button secondary view-pdf', 'View document');
       view.type = 'button'; view.setAttribute('aria-label', `View and edit processed chunks: ${file.name}`);
       view.dataset.ready = state.status?.pending_files?.[fileHash] ? 'false' : 'true';
       view.title = view.dataset.ready === 'false' ? 'Available after processing finishes.' : 'View and edit the cleaned, normalized content used for search and answers.';
       view.addEventListener('click', () => openPdf(fileHash, file.name));
       info.append(view);
     }
-    item.append(node('span', 'mini-file', isImage ? 'IMG' : 'PDF'), info, remove); $('documents').append(item);
+    item.append(node('span', 'mini-file', isImage ? 'IMG' : 'PDF'), info); $('documents').append(item);
   }
   if (!files.length) $('documents').append(node('p', 'empty-documents', state.key ? 'No documents processed yet. Upload your first PDF or image.' : state.online && !state.domains.length ? 'Create a knowledge base to add your first document.' : 'Select your knowledge base to view its documents.'));
   controls();

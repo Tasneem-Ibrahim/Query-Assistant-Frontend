@@ -17,6 +17,8 @@
 .workspace .document-info strong { font-size: 13px; max-width: 235px; color: #e2ecff; }
 .workspace .document-info small { font-size: 11px; color: #b0c4e3; }
 .document-info { flex: 1; overflow: hidden; }
+.document-title-row { display: flex; align-items: center; gap: 8px; }
+.document-title-row strong { min-width: 0; }
 .delete-document {
   display: inline-flex;
   align-items: center;
@@ -254,7 +256,7 @@ body.workspace-page .upload-zone:is(:hover, .dragover, :has(input:focus-visible)
 .view-image-text { display: block; margin-top: 5px; border: 0; padding: 0; background: transparent; color: inherit; font: inherit; font-size: 12px; text-decoration: underline; cursor: pointer; }
 .view-image-text:disabled { opacity: .5; cursor: default; }
 
-.view-pdf { display:block; margin-top:5px; border:0; padding:0; background:transparent; color:#b1ccff; font-size:12px; text-decoration:underline; }
+.document-info .view-pdf { margin-top:5px; }
 .workspace .chat-tabs { flex-wrap:nowrap; overflow-x:auto; flex-shrink:0; }
 .chat-tabs > button { flex-shrink:0; white-space:nowrap; }
 .pdf-tab { display:flex; align-items:center; flex-shrink:0; gap:8px; }

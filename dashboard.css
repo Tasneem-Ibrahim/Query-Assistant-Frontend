@@ -35,12 +35,14 @@ body.workspace-page #user-upload-status .user-upload-card > h3 {
 }
 body.workspace-page #user-upload-status .user-upload-card > p { margin:5px 0 0; }
 body.workspace-page #user-upload-status .user-upload-card .admin-actions { margin:8px 0 0; }
-body.workspace-page #user-upload-status .user-upload-card .admin-actions .button {
+body.workspace-page #user-upload-status .user-upload-card .admin-actions .button,
+body.workspace-page .document .view-pdf {
   min-height:34px;
   margin:0;
   padding:5px 10px;
   font-size:12px;
 }
+body.workspace-page .document .view-pdf { margin-top:5px; }
 body.workspace-page #user-upload-status .upload-card-delete { top:6px; right:6px; }
 body.workspace-page .upload-card-delete { position:absolute; top:14px; right:14px; display:grid; place-items:center; width:36px; height:36px; padding:8px; background:transparent; border:1px solid transparent; border-radius:9px; color:#91a6c3; cursor:pointer; transition:color 150ms,background 150ms,border-color 150ms; }
 body.workspace-page .upload-card-delete svg { width:18px; height:18px; }
@@ -328,7 +330,6 @@ body.workspace-page .document {
   box-shadow:inset 2px 0 0 color-mix(in srgb,var(--gold) 40%,transparent);
 }
 body.workspace-page .document .mini-file {
-  grid-row:span 2;
   min-width:32px;
   padding:7px 4px;
   font-size:10px;
@@ -345,12 +346,11 @@ body.workspace-page .document-info strong {
   font-weight:650;
 }
 body.workspace-page .document-info small { font-size:12px; color:var(--dash-muted); }
-body.workspace-page .document :is(.delete-document,.view-pdf,.view-image-text) {
+body.workspace-page .document :is(.delete-document,.view-image-text) {
   width:fit-content;
   min-height:34px;
   font-size:12px;
 }
-body.workspace-page .document .delete-document { grid-column:2; }
 body.workspace-page .empty-documents { margin:0; }
 body.workspace-page .knowledge-actions { flex-wrap:wrap; gap:8px; }
 body.workspace-page .knowledge-actions .button { flex:1 0 auto; }
