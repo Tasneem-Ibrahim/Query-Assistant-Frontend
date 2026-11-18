@@ -17,6 +17,7 @@ export function createAdminPanel({ api, user, onError, sendUpload, onReady = () 
   if (!landing) {
     document.querySelector('#admin-menu .admin-dropdown').prepend($('admin-refresh'));
     $('dashboard-page-title').textContent = 'Workspace';
+    $('workspace-title').textContent = 'Documents & assistant';
   }
   const paths = { home: 'm3 10 9-7 9 7v10a1 1 0 0 1-1 1h-5v-7H9v7H4a1 1 0 0 1-1-1Z',
     dashboard: 'M3 3h7v7H3z M14 3h7v7h-7z M3 14h7v7H3z M14 14h7v7h-7z',

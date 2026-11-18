@@ -112,9 +112,17 @@ function renderMessages() {
   const messages = state.mode === 'chat' ? history() : (state.results[state.key] || []);
   if (!messages.length) {
     const empty = node('div', 'chat-empty');
-    empty.append(node('div', 'empty-symbol ai-empty-icon', state.mode === 'chat' ? '✦' : '⌕'), node('h4', state.mode === 'chat' ? 'clarity-quote' : '', state.mode === 'chat' ? 'From Questions to Clarity,\nFrom Data to Insights' : 'Find the passage you need.'));
+    const isWorkspace = document.body.classList.contains('workspace-page');
+    const heading = state.mode === 'search' ? 'Find the passage you need.' :
+      'From Questions to Clarity,\nFrom Data to Insights';
+    const icon = node('div', 'empty-symbol ai-empty-icon', state.mode === 'chat' ? '✦' : '⌕');
+    icon.setAttribute('aria-hidden', 'true');
+    const title = node('h4', state.mode === 'chat' ? 'clarity-quote' : '', heading);
+    if (isWorkspace) title.classList.add('assistant-prompt-title');
+    empty.append(icon, title);
     const domain = state.domains.find(d => d.key === state.key);
-    empty.append(node('p', '', state.mode === 'search' ? 'Find relevant excerpts in your documents.' : domain?.welcome || 'Connect your backend and add a PDF to get started.'));
+    empty.append(node('p', '', state.mode === 'search' ? 'Find relevant excerpts in your documents.' :
+      isWorkspace ? 'Ask a question about your documents to get started.' : domain?.welcome || 'Connect your backend and add a PDF to get started.'));
     const defaultSuggestions = ['What are the key takeaways from these documents?', 'Summarize the main ideas in this knowledge base.', 'Which details are most important to understand?', 'What conclusions are supported by these documents?'];
     const suggestions = state.status?.chunks && state.mode === 'chat'
       ? [...new Set([...(domain?.examples || []), ...defaultSuggestions])].slice(0, 4) : [];
@@ -634,7 +642,7 @@ $('upload').addEventListener('click', () => ingest(false)); $('bundled').addEven
 $('question-form').addEventListener('submit', submit);
 $('question').addEventListener('input', () => { $('question').style.height = 'auto'; $('question').style.height = `${Math.min($('question').scrollHeight, 130)}px`; controls(); });
 $('question').addEventListener('keydown', event => { if (event.key === 'Enter' && !event.shiftKey && !event.isComposing) { event.preventDefault(); $('question-form').requestSubmit(); } });
-for (const mode of ['chat', 'search']) $(`${mode}-mode`).addEventListener('click', () => { state.mode = mode; activatePdf(); for (const name of ['chat', 'search']) { $(`${name}-mode`).classList.toggle('active', name === mode); $(`${name}-mode`).setAttribute('aria-pressed', String(name === mode)); } $('question').placeholder = mode === 'chat' ? 'What would you like to know?' : 'Search for a clause, topic, or passage…'; notice(); renderMessages(); });
+for (const mode of ['chat', 'search']) $(`${mode}-mode`).addEventListener('click', () => { state.mode = mode; activatePdf(); for (const name of ['chat', 'search']) { $(`${name}-mode`).classList.toggle('active', name === mode); $(`${name}-mode`).setAttribute('aria-pressed', String(name === mode)); } $('question').placeholder = mode === 'chat' ? 'Ask a question' : 'Search documents'; notice(); renderMessages(); });
 $('clear').addEventListener('click', () => { if (state.mode === 'chat') state.histories[state.key] = []; else state.results[state.key] = []; renderMessages(); notice(); });
 $('refresh').addEventListener('click', async () => {
   const generation = state.generation;

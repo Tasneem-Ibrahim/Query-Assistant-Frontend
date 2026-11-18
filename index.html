@@ -45,16 +45,15 @@
   </div>
   <div id="admin-app" hidden inert>
   <aside id="admin-sidebar" class="admin-sidebar" hidden aria-label="Admin navigation">
-    <a class="sidebar-brand" href="index.html" aria-label="Query Assistant home"><img src="assets/query-assistant-logo.svg" alt="" width="34" height="34"><div>Query Assistant <span>ADMIN WORKSPACE</span></div></a>
+    <a class="sidebar-brand" href="index.html" aria-label="Query Assistant home"><img src="assets/query-assistant-logo.svg" alt="" width="34" height="34"><div>Query Assistant <span>Admin workspace</span></div></a>
     <button type="button" data-admin-page="home">Home</button>
     <button type="button" data-admin-page="dashboard">Dashboard</button>
-    <div class="sidebar-group">USER MANAGEMENT</div>
+    <div class="sidebar-group">User management</div>
     <button type="button" data-admin-page="users">All users</button>
     <button type="button" data-admin-page="requests">Upload requests <span id="admin-pending" class="count">0</span></button>
-    <p>Manage access.<br>Keep knowledge organized.</p>
   </aside>
   <header class="nav shell">
-    <div class="dashboard-heading"><span class="eyebrow">YOUR INTELLIGENCE WORKSPACE</span><h1 id="dashboard-page-title">Dashboard</h1></div>
+    <div class="dashboard-heading"><h1 id="dashboard-page-title">Dashboard</h1></div>
     <button id="admin-menu-toggle" class="button secondary" type="button" hidden aria-controls="admin-sidebar" aria-expanded="false">Menu</button>
     <a class="brand" href="index.html" aria-label="Query Assistant home"><span class="brand-icon" aria-hidden="true"><img src="assets/query-assistant-logo.svg" alt="" width="48" height="48"></span><span class="brand-name">Query <span>Assistant</span></span></a>
     <nav aria-label="Main navigation"><a href="workspace.html">Workspace</a></nav>
@@ -93,11 +92,11 @@
     </section>
 
     <section class="workspace shell" id="workspace" aria-labelledby="workspace-title">
-      <div class="section-heading"><div><div class="eyebrow">THE INTELLIGENCE WORKSPACE</div><h2 id="workspace-title">A little curiosity. A lot of clarity.</h2></div><span class="workspace-label"><span></span> Your document workspace</span></div>
+      <div class="section-heading"><div><div class="eyebrow">THE INTELLIGENCE WORKSPACE</div><h2 id="workspace-title">A little curiosity. A lot of clarity.</h2></div><span class="workspace-label"><span></span> Your document workspace</span><a class="button secondary assistant-shortcut" href="#document-assistant">Jump to assistant <span aria-hidden="true">&#8595;</span></a></div>
       <div class="workspace-grid">
         <aside class="knowledge panel">
           <div class="panel-title"><h3>Knowledge base</h3><span class="subtle-icon">▤</span></div>
-          <label class="field-label" for="domain">CHOOSE YOUR ASSISTANT</label>
+          <label class="field-label" for="domain">Choose a knowledge base</label>
           <select id="domain" disabled><option>Connecting to backend…</option></select>
           <div class="knowledge-actions"><button id="new-domain" class="button secondary" disabled>+ New knowledge base</button><button id="rename-domain" class="button secondary" hidden disabled>Rename</button></div>
           <button id="delete-domain" class="danger" type="button" hidden disabled>Delete this knowledge base</button>
@@ -105,7 +104,7 @@
           <div class="divider"></div>
           <div class="document-heading"><span>Your documents</span><span id="file-count" class="count">0</span></div>
           <div id="documents" class="documents"><p class="empty-documents">Your processed PDFs will appear here.</p></div>
-          <label class="upload-zone" id="dropzone" for="pdf"><span class="upload-symbol">↑</span><strong>Drop your PDF or image here</strong><span>or click to browse · PDF or images ? up to 4 MB</span><input id="pdf" type="file" accept="application/pdf,image/jpeg,image/png,image/webp,image/bmp,image/tiff,image/avif,.pdf,.jpg,.jpeg,.png,.jfif,.webp,.bmp,.tif,.tiff,.avif"></label>
+          <label class="upload-zone" id="dropzone" for="pdf"><span class="upload-symbol">↑</span><strong>Drop your PDF or image here</strong><span>Browse files up to 4 MB</span><input id="pdf" type="file" accept="application/pdf,image/jpeg,image/png,image/webp,image/bmp,image/tiff,image/avif,.pdf,.jpg,.jpeg,.png,.jfif,.webp,.bmp,.tif,.tiff,.avif"></label>
           <p class="ocr-hint">Images: JPG, JPEG, PNG, JFIF, WebP, BMP, TIF, TIFF, AVIF.</p>
           <p id="selected-file" class="selected-file"></p>
           <button id="upload" class="button primary full" disabled>Upload & process <span>↗</span></button>
@@ -117,7 +116,7 @@
           <div class="knowledge-footer"><span class="status-dot"></span><span id="chunk-count">No knowledge loaded</span><button id="refresh" title="Refresh document status" aria-label="Refresh document status">↻</button></div>
         </aside>
 
-        <section class="chat panel" aria-label="Document conversation">
+        <section id="document-assistant" class="chat panel" aria-label="Document conversation" tabindex="-1">
           <div class="chat-header"><div class="chat-heading"><span class="assistant-avatar">✦</span><div><h3 id="chat-title">Document assistant</h3><span>Answers grounded in your documents.</span></div></div><button class="icon-button" id="clear" title="Clear this conversation" aria-label="Clear this conversation">↺</button></div>
           <div class="chat-tabs" role="group" aria-label="Workspace mode"><button class="active" id="chat-mode" aria-pressed="true">✦ Ask your documents</button><button id="search-mode" aria-pressed="false">⌕ Search passages</button></div>
           <div id="pdf-panels" class="pdf-panels" hidden></div>
@@ -135,7 +134,7 @@
             <span id="voice-status" role="status" aria-live="polite"></span>
             <span id="voice-interim" class="voice-interim" aria-live="off" hidden></span>
           </div>
-<div class="notice" id="notice" role="status" hidden></div><form id="question-form"><label class="sr-only" for="question">Your question</label><textarea id="question" rows="1" maxlength="12000" placeholder="What would you like to know?" disabled></textarea><button class="voice-mic" id="voice-start" type="button" aria-label="Start voice query" title="Start voice query" aria-pressed="false" disabled><svg viewBox="0 0 24 24" width="19" height="19" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="9" y="2" width="6" height="12" rx="3"/><path d="M5 10v2a7 7 0 0 0 14 0v-2M12 19v3M8 22h8"/></svg></button><button class="send" id="send" type="submit" aria-label="Send question" disabled>↑</button></form><div class="composer-footer"><span><span class="spark">✦</span> Grounded in your documents</span><span>Enter to send · Shift + Enter for a new line</span></div></div>
+<div class="notice" id="notice" role="status" hidden></div><form id="question-form"><label class="sr-only" for="question">Your question</label><textarea id="question" rows="1" maxlength="12000" placeholder="Ask a question" disabled></textarea><button class="voice-mic" id="voice-start" type="button" aria-label="Start voice query" title="Start voice query" aria-pressed="false" disabled><svg viewBox="0 0 24 24" width="19" height="19" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="9" y="2" width="6" height="12" rx="3"/><path d="M5 10v2a7 7 0 0 0 14 0v-2M12 19v3M8 22h8"/></svg></button><button class="send" id="send" type="submit" aria-label="Send question" disabled>↑</button></form><div class="composer-footer"><span><span class="spark">✦</span> Grounded in your documents</span><span>Enter to send · Shift + Enter for a new line</span></div></div>
         </section>
       </div>
     </section>
