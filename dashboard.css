@@ -173,7 +173,7 @@ body:is(.admin-layout,.workspace-page) .documents { margin:12px 0 18px; }
 body:is(.admin-layout,.workspace-page) .empty-documents { padding:20px 14px; background:var(--dash-field); border:1px dashed var(--dash-border); border-radius:12px; color:var(--dash-muted); font-size:14px; line-height:1.8; text-align:center; }
 body:is(.admin-layout,.workspace-page) .upload-zone { background:#9fbbf00b; border:1px solid #a6c4ff45; border-radius:16px; padding:26px 14px; transition:background 180ms,border-color 180ms,box-shadow 180ms; }
 body:is(.admin-layout,.workspace-page) .knowledge .upload-zone:is(:hover,.dragover) {
-  background:color-mix(in srgb,var(--bg) 94%,transparent);
+  background:color-mix(in srgb,var(--bg) 20%,transparent);
   border-color:#a6c4ff45;
 }
 body:is(.admin-layout,.workspace-page) .upload-zone strong { font-size:15px; font-weight:650; }
