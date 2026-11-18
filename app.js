@@ -29,9 +29,9 @@ const savedProcessor = createSavedProcessor({
     if (event.message) $('logs').append(document.createTextNode(event.message + '\n'));
     if (event.type === 'done') { $('processing-status').textContent = 'Ready'; $('processing-status').className = 'approval-badge approved'; }
   }, current),
-  onError: error => { notice(error.message); $('processing-status').textContent = error.processingFailed ? 'Failed' : 'Paused'; $('processing-status').className = error.processingFailed ? 'approval-badge rejected' : 'approval-badge processing-status'; },
+  onError: error => { notice(error.message); $('processing-status').textContent = error.processingFailed ? 'Failed' : 'Paused'; $('processing-status').className = error.processingFailed ? 'approval-badge rejected' : 'approval-badge'; },
   onFinish: async (row, result, current) => {
-    if (result === 'paused') $('processing-status').textContent = 'Paused';
+    if (result === 'paused') { $('processing-status').textContent = 'Paused'; $('processing-status').className = 'approval-badge'; }
     await adminPanel.refresh();
     if (current()) {
       state.busy = false;
@@ -563,25 +563,31 @@ async function ingest(bundled) {
   const key = state.key, generation = state.generation;
   const imageName = !bundled && /\.(jpe?g|png|jfif|webp|bmp|tiff?|avif)$/i.test(state.file?.name || '') ? state.file.name.replace(/[^A-Za-z0-9._-]+/g, '_') : null;
   clearImageText();
-  state.busy = true; controls(); notice(); $('processing').hidden = true; $('logs').textContent = 'Starting document processing…\n';
-  let processingStarted = false;
+  state.busy = true; controls(); notice();
+  $('processing').hidden = false;
+  $('processing-status').textContent = bundled ? 'Processing' : 'Uploading';
+  $('processing-status').className = 'approval-badge processing-status';
+  $('logs').textContent = bundled ? 'Starting document processing…\n' : `Uploading ${state.file.name}…\n`;
   const data = new FormData(); if (!bundled) data.append('file', state.file);
   data.append('force', $('force').checked); data.append('use_llm', $('use-llm').checked);
   try {
     if (!bundled) {
       const prepared = await adminPanel.prepare(state.file, key, $('use-llm').checked);
-      if (generation !== state.generation || !prepared) return;
+      if (generation !== state.generation) return;
+      if (!prepared) { $('processing').hidden = true; return; }
       if (prepared !== true) {
         state.file = null; $('pdf').value = ''; $('selected-file').textContent = '';
-        notice(prepared.job_message || 'Your file is saved. Track its status below; no re-upload is needed.');
+        const message = prepared.job_message || 'Your file is saved. Track its status below; no re-upload is needed.';
+        $('processing-status').textContent = prepared.status === 'pending' ? 'Awaiting approval' : 'File saved';
+        $('processing-status').className = prepared.status === 'pending' ? 'approval-badge pending' : 'approval-badge';
+        $('logs').textContent = message;
         return;
       }
     }
     if (generation !== state.generation) return;
-    processingStarted = true; $('processing').hidden = false;
-    $('processing-status').textContent = 'Processing'; $('processing-status').className = 'approval-badge processing-status';
     const response = await request(base, `/domains/${encodeURIComponent(key)}/ingest`, { method: 'POST', body: data });
     if (generation !== state.generation) return;
+    $('processing-status').textContent = 'Processing';
     const onEvent = event => {
       if (generation !== state.generation) return;
       const log = event.type === 'done' ? `${event.report.name || event.report.file || 'Document'}: ${event.report.status}. ${event.report.chunks ?? 0} passages ready.` : event.message;
@@ -590,12 +596,24 @@ async function ingest(bundled) {
     if (response.headers.get('content-type')?.includes('application/json')) {
       const { jobs } = await response.json();
       if (generation !== state.generation) return;
-      await runJobs(base, key, jobs, onEvent, () => generation === state.generation);
+      const result = await runJobs(base, key, jobs, onEvent, () => generation === state.generation);
+      if (generation !== state.generation) return;
+      if (result === 'paused') {
+        $('processing-status').textContent = 'Paused';
+        $('processing-status').className = 'approval-badge';
+        return;
+      }
     } else await readEvents(response, onEvent);
     if (generation !== state.generation) return;
     state.file = null; $('pdf').value = ''; $('selected-file').textContent = ''; notice('Your knowledge is ready. Ask a question or search the passages.');
     $('processing-status').textContent = 'Ready'; $('processing-status').className = 'approval-badge approved';
-  } catch (e) { if (generation === state.generation) { notice(e.message); if (processingStarted) { $('processing-status').textContent = 'Failed'; $('processing-status').className = 'approval-badge rejected'; } } }
+  } catch (e) {
+    if (generation === state.generation) {
+      $('processing-status').textContent = 'Failed';
+      $('processing-status').className = 'approval-badge rejected';
+      $('logs').append(document.createTextNode(e.message + '\n'));
+    }
+  }
   finally {
     if (generation !== state.generation) return;
     try {
