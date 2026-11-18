@@ -1,4 +1,5 @@
 import { copyFile, cp, mkdir, writeFile } from 'node:fs/promises';
+import { basename } from 'node:path';
 
 const output = new URL('./dist/', import.meta.url);
 let backendUrl = (process.env.BACKEND_URL || '').trim();
@@ -15,6 +16,9 @@ await writeFile(new URL('config.js', output), `export const backendUrl = ${JSON.
 for (const name of ['index.html', 'styles.css', 'dashboard.css', 'app.js', 'api.js', 'voice.js', 'onboarding.js', 'admin-panel.js', 'saved-processing.js']) {
   await copyFile(new URL(name, import.meta.url), new URL(name, output));
 }
-await cp(new URL('./assets/', import.meta.url), new URL('assets/', output), { recursive: true });
+await cp(new URL('./assets/', import.meta.url), new URL('assets/', output), {
+  recursive: true,
+  filter: source => basename(source) !== 'temporary reference image'
+});
 for (const page of ['workspace.html', 'dashboard.html']) await copyFile(new URL('./index.html', import.meta.url), new URL(page, output));
 console.log('Static frontend built in dist/.');

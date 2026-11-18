@@ -46,6 +46,14 @@ const adminPanel = createAdminPanel({ user: () => state.user, onError: message =
   onReady: rows => refreshApprovedDocuments(rows).catch(error => notice(error.message)),
   onApprovedUploads: rows => savedProcessor.enqueue(rows),
   onViewPdf: row => viewOriginalPdf(row),
+  knowledgeBases: () => state.domains,
+  onOpenBase: async key => {
+    if (key === state.key) return true;
+    if (state.busy || !state.domains.some(domain => domain.key === key)) return false;
+    $('domain').value = key;
+    await selectDomain();
+    return state.key === key;
+  },
   confirmRemoveCard: row => confirmDeletion('Delete upload card?', `Remove the card for "${row.filename}" from your request list? Your PDF, processing and the admin record remain saved.`, 'Delete card'),
   api: async (path, body, method = 'GET') => (await request(base, path, body ? { method, headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) } : {})).json() });
 const guide = createWorkspaceGuide({

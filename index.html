@@ -48,6 +48,7 @@
     <a class="sidebar-brand" href="index.html" aria-label="Query Assistant home"><img src="assets/query-assistant-logo.svg" alt="" width="34" height="34"><div>Query Assistant <span>Admin workspace</span></div></a>
     <button type="button" data-admin-page="home">Home</button>
     <button type="button" data-admin-page="dashboard">Dashboard</button>
+    <button type="button" data-admin-page="knowledge-bases">Knowledge Bases</button>
     <div class="sidebar-group">User management</div>
     <button type="button" data-admin-page="users">All users</button>
     <button type="button" data-admin-page="requests">Upload requests <span id="admin-pending" class="count">0</span></button>
@@ -59,6 +60,7 @@
     <nav aria-label="Main navigation"><a href="workspace.html">Workspace</a></nav>
     <div class="nav-actions">
       <a id="admin-dashboard-entry" class="button secondary" href="dashboard.html" hidden>Dashboard</a>
+      <a id="knowledge-bases-link" class="button secondary" href="#knowledge-bases" hidden>Knowledge Bases</a>
       <button id="admin-bell" class="button secondary" type="button" hidden>Notifications (0)</button>
       <details id="admin-menu" class="admin-menu">
         <summary><span id="account-name">Account</span> <svg class="admin-chevron" viewBox="0 0 16 16" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true"><path d="m4 6 4 4 4-4"/></svg></summary>
@@ -68,6 +70,11 @@
   </header>
 
   <main>
+    <section id="knowledge-bases" class="shell" hidden aria-labelledby="knowledge-bases-title">
+      <h1 id="knowledge-bases-title" tabindex="-1">Knowledge Bases</h1>
+      <p>Browse your knowledge bases and their documents.</p>
+      <div id="knowledge-base-list"></div>
+    </section>
     <section id="admin-overview" class="shell admin-overview" hidden aria-label="Dashboard overview">
       <div><div class="eyebrow">ADMIN WORKSPACE</div><h1>Dashboard</h1><p>Your knowledge, with room to focus.</p></div>
       <div class="admin-stats"><article class="panel"><span>Total users</span><strong id="admin-total-users">—</strong><small>Registered accounts</small></article><article class="panel"><span>Pending requests</span><strong id="admin-total-pending">—</strong><small>Awaiting your review</small></article></div>

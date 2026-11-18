@@ -1,5 +1,5 @@
 // Account-scoped administration UI. All authorization remains on the backend.
-export function createAdminPanel({ api, user, onError, sendUpload, onReady = () => {}, onApprovedUploads = () => {}, onViewPdf, confirmRemoveCard }) {
+export function createAdminPanel({ api, user, onError, sendUpload, onReady = () => {}, onApprovedUploads = () => {}, onViewPdf, confirmRemoveCard, knowledgeBases, onOpenBase }) {
   const $ = id => document.getElementById(id);
   const el = (tag, text, cls = '') => { const n = document.createElement(tag); n.textContent = text; n.className = cls; return n; };
   let generation = 0, timer, people = [], requests = [], selected = null, tab = 'overview', page = 'dashboard', filter = 'pending', busy = false;
@@ -21,6 +21,7 @@ export function createAdminPanel({ api, user, onError, sendUpload, onReady = () 
   }
   const paths = { home: 'm3 10 9-7 9 7v10a1 1 0 0 1-1 1h-5v-7H9v7H4a1 1 0 0 1-1-1Z',
     dashboard: 'M3 3h7v7H3z M14 3h7v7h-7z M3 14h7v7H3z M14 14h7v7h-7z',
+    'knowledge-bases': 'M3 6a2 2 0 0 1 2-2h5l2 2h7a2 2 0 0 1 2 2v10a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2Z M7 11h10 M7 15h7',
     users: 'M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2 M9 3a4 4 0 1 0 0 8 4 4 0 0 0 0-8 M20 21v-2a4 4 0 0 0-3-3.87 M16 3.13a4 4 0 0 1 0 7.75',
     requests: 'M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8Z M14 2v6h6 M8 15l3 3 5-5' };
   document.querySelectorAll('[data-admin-page]').forEach(n => {
@@ -50,6 +51,8 @@ export function createAdminPanel({ api, user, onError, sendUpload, onReady = () 
     $('admin-sidebar').hidden = true; $('admin-overview').hidden = true; $('admin-content').hidden = true;
     $('user-upload-status').hidden = true; $('workspace').hidden = false;
     $('admin-content').replaceChildren(); $('user-upload-status').replaceChildren();
+    $('knowledge-bases').hidden = true; $('knowledge-bases-link').hidden = true;
+    $('knowledge-base-list').replaceChildren();
     $('admin-bell').hidden = true; $('admin-menu-toggle').hidden = true; $('admin-sync-status').textContent = '';
     $('admin-dashboard-entry').hidden = true; $('admin-sync').hidden = true;
     closeNavigation();
@@ -67,7 +70,7 @@ export function createAdminPanel({ api, user, onError, sendUpload, onReady = () 
         $('admin-pending').textContent = count; $('admin-bell').textContent = `Notifications (${count})`;
         $('admin-total-users').textContent = people.length; $('admin-total-pending').textContent = count;
         const hasDraft = Array.from($('admin-content').querySelectorAll('textarea, input[type="search"]')).some(n => n.value);
-        if (!['home', 'dashboard'].includes(page) && (!background || (!hasDraft && !$('admin-content').contains(document.activeElement)))) render();
+        if (['users', 'requests'].includes(page) && (!background || (!hasDraft && !$('admin-content').contains(document.activeElement)))) render();
       } else {
         const readyDocuments = data.ready_documents || data.requests.filter(r => r.job_state === 'ready');
         const previousReady = own.ready_documents || own.requests.filter(r => r.job_state === 'ready');
@@ -96,22 +99,122 @@ export function createAdminPanel({ api, user, onError, sendUpload, onReady = () 
     if (next === 'home' && !landing) { location.assign('index.html'); return; }
     if (next !== 'home' && landing) { location.assign(`dashboard.html${next === 'dashboard' ? '' : '#' + next}`); return; }
     page = next; selected = null; tab = 'overview';
+    const browsing = next === 'knowledge-bases';
+    const isAdmin = user()?.role === 'admin';
     if (!landing) {
-      const hash = ['users', 'requests'].includes(next) ? '#' + next : '';
+      const hash = ['users', 'requests', 'knowledge-bases'].includes(next) ? '#' + next : '';
       window.history.replaceState(null, '', location.pathname + location.search + hash);
     }
-    $('dashboard-page-title').textContent = ({ dashboard: 'Dashboard', users: 'Users', requests: 'Upload requests' })[next] || 'Dashboard';
+    $('dashboard-page-title').textContent = ({ dashboard: 'Dashboard', users: 'Users', requests: 'Upload requests', 'knowledge-bases': 'Knowledge Bases' })[next] || 'Workspace';
     const home = next === 'home';
-    document.body.classList.toggle('admin-layout', !home);
-    $('admin-sidebar').hidden = home; $('admin-menu-toggle').hidden = home;
-    $('admin-dashboard-entry').hidden = !home; $('admin-sync').hidden = home;
-    $('admin-bell').hidden = home;
-    $('workspace').hidden = !['home', 'dashboard'].includes(next); $('admin-overview').hidden = next !== 'dashboard';
-    $('admin-content').hidden = home || next === 'dashboard';
+    document.body.classList.toggle('admin-layout', isAdmin && !home);
+    $('admin-sidebar').hidden = !isAdmin || home; $('admin-menu-toggle').hidden = !isAdmin || home;
+    $('admin-dashboard-entry').hidden = !home; $('admin-sync').hidden = home || browsing;
+    $('admin-bell').hidden = !isAdmin || home;
+    $('workspace').hidden = !['home', 'dashboard', 'workspace'].includes(next);
+    $('admin-overview').hidden = next !== 'dashboard';
+    $('admin-content').hidden = !['users', 'requests'].includes(next);
+    $('knowledge-bases').hidden = !browsing;
+    const browseLink = $('knowledge-bases-link');
+    browseLink.hidden = isAdmin || landing;
+    browseLink.href = browsing ? 'workspace.html' : '#knowledge-bases';
+    browseLink.textContent = browsing ? 'Workspace' : 'Knowledge Bases';
     document.querySelectorAll('[data-admin-page]').forEach(n => n.setAttribute('aria-current', n.dataset.adminPage === next ? 'page' : 'false'));
     closeNavigation();
-    if (!['home', 'dashboard'].includes(next)) render();
+    if (browsing) {
+      renderKnowledgeBases();
+      $('knowledge-bases-title').focus({ preventScroll: true });
+    }
+    if (['users', 'requests'].includes(next)) render();
     window.scrollTo({ top: 0, behavior: 'instant' });
+  }
+  async function loadBaseDocuments(domain, details, list, count) {
+    list.replaceChildren(el('p', 'Loading documents…'));
+    try {
+      const status = await api(`/domains/${encodeURIComponent(domain.key)}/status`);
+      if (!details.isConnected || page !== 'knowledge-bases') return;
+      const files = new Map();
+      for (const [hash, file] of Object.entries(status.pending_files || {})) {
+        files.set(hash, { filename: file.name, status: 'Processing incomplete' });
+      }
+      for (const [hash, file] of Object.entries(status.files || {})) {
+        files.set(hash, { filename: file.name, status: 'Ready' });
+      }
+      for (const request of own.requests) {
+        if (request.domain !== domain.key || files.get(request.file_hash)?.status === 'Ready') continue;
+        if (request.status === 'pending') files.set(request.file_hash || request.id, { filename: request.filename, status: 'Awaiting approval' });
+        if (request.status === 'approved' && ['queued', 'processing', 'retrying', 'failed'].includes(request.job_state)) {
+          files.set(request.file_hash, { filename: request.filename, status: request.job_state === 'failed' ? 'Failed' : 'Processing' });
+        }
+      }
+      const pdfs = [...files].filter(([, file]) => /\.pdf$/i.test(file.filename));
+      count.textContent = `${pdfs.length} ${pdfs.length === 1 ? 'PDF' : 'PDFs'}`;
+      list.replaceChildren();
+      if (!pdfs.length) list.append(el('p', 'No PDFs in this knowledge base.'));
+      for (const [hash, file] of pdfs) {
+        const row = el('div', '', 'knowledge-base-pdf');
+        const badge = { Ready: 'approved', 'Awaiting approval': 'pending', Failed: 'rejected' }[file.status] || 'processing-status';
+        row.append(el('strong', file.filename), el('span', file.status, `approval-badge ${badge}`));
+        if (file.status === 'Ready') row.append(button('View PDF', () => onViewPdf({ domain: domain.key, file_hash: hash, filename: file.filename })));
+        list.append(row);
+      }
+    } catch {
+      if (details.isConnected && page === 'knowledge-bases') list.replaceChildren(el('p', 'Could not load PDFs. Close and reopen this knowledge base to retry.'));
+    }
+  }
+  function renderKnowledgeBases() {
+    const root = $('knowledge-base-list');
+    const domains = knowledgeBases();
+    const loadCards = [];
+    root.replaceChildren();
+    if (!domains.length) root.append(el('p', 'No knowledge bases to show. Create one in Workspace.'));
+    for (const domain of domains) {
+      const card = el('article', '', 'panel knowledge-base-card');
+      const details = el('details', '');
+      const summary = el('summary', '');
+      const icon = el('span', '▤', 'knowledge-base-icon');
+      icon.setAttribute('aria-hidden', 'true');
+      const count = el('span', '', 'knowledge-base-count');
+      count.hidden = true;
+      const top = el('span', '', 'knowledge-base-card-top');
+      top.append(icon, count);
+      const title = el('strong', domain.label, 'knowledge-base-name');
+      const browse = el('span', 'View documents', 'knowledge-base-browse');
+      const arrow = el('span', '›');
+      arrow.setAttribute('aria-hidden', 'true');
+      browse.append(arrow);
+      summary.append(top, title, browse);
+      const list = el('div', '', 'knowledge-base-pdfs');
+      list.setAttribute('aria-live', 'polite');
+      details.append(summary, list);
+      let loading = false;
+      const load = async () => {
+        if (loading || !card.isConnected || page !== 'knowledge-bases') return;
+        loading = true;
+        await loadBaseDocuments(domain, details, list, count);
+        loading = false;
+        count.hidden = !count.textContent;
+      };
+      loadCards.push(load);
+      details.addEventListener('toggle', () => { if (details.open) void load(); });
+      const open = button('Open in Workspace', async () => {
+        const version = generation;
+        const opened = await onOpenBase(domain.key);
+        if (version !== generation || !card.isConnected || page !== 'knowledge-bases') return;
+        if (!opened) return;
+        navigate(user()?.role === 'admin' ? 'dashboard' : 'workspace');
+        $('workspace').scrollIntoView({ block: 'start' });
+        $('domain').focus({ preventScroll: true });
+      });
+      card.append(details, open);
+      root.append(card);
+    }
+    void loadKnowledgeBaseCards(loadCards);
+  }
+  async function loadKnowledgeBaseCards(cards) {
+    for (let index = 0; index < cards.length; index += 4) {
+      await Promise.all(cards.slice(index, index + 4).map(load => load()));
+    }
   }
   const date = value => value ? new Date(value).toLocaleString() : '—';
   async function removeCard(row) {
@@ -302,8 +405,9 @@ export function createAdminPanel({ api, user, onError, sendUpload, onReady = () 
     const isAdmin = user()?.role === 'admin';
     document.body.classList.toggle('admin-layout', isAdmin);
     $('admin-sidebar').hidden = !isAdmin; $('admin-bell').hidden = !isAdmin; $('admin-menu-toggle').hidden = !isAdmin;
-    if (isAdmin) navigate(landing ? 'home' : ['users', 'requests'].includes(location.hash.slice(1)) ? location.hash.slice(1) : 'dashboard');
-    else { $('workspace').hidden = landing; $('admin-sync').hidden = landing; }
+    const requestedPage = location.hash.slice(1);
+    if (isAdmin) navigate(landing ? 'home' : ['users', 'requests', 'knowledge-bases'].includes(requestedPage) ? requestedPage : 'dashboard');
+    else if (!landing) navigate(requestedPage === 'knowledge-bases' ? requestedPage : 'workspace');
     if (landing) $('workspace').hidden = true;
     $('admin-dashboard-entry').textContent = 'Dashboard';
     $('admin-dashboard-entry').href = isAdmin ? 'dashboard.html' : 'workspace.html';
@@ -311,6 +415,10 @@ export function createAdminPanel({ api, user, onError, sendUpload, onReady = () 
     await refresh(); if (version === generation) timer = setInterval(() => refresh(true), 30000);
   }
   document.querySelectorAll('[data-admin-page]').forEach(n => n.addEventListener('click', () => navigate(n.dataset.adminPage)));
+  $('knowledge-bases-link').addEventListener('click', event => {
+    event.preventDefault();
+    navigate(page === 'knowledge-bases' ? 'workspace' : 'knowledge-bases');
+  });
   $('admin-bell').addEventListener('click', () => navigate('requests'));
   $('admin-menu-toggle').addEventListener('click', () => {
     if ($('admin-sidebar').classList.contains('is-open')) { closeNavigation(true); return; }
