@@ -302,6 +302,40 @@ export function createAdminPanel({ api, user, onError, sendUpload, onReady = () 
     }
     return card;
   }
+  function activityTags(counts, statuses) {
+    const row = el('div', '', 'activity-tags');
+    for (const [key, label, style] of statuses) {
+      if (counts[key]) row.append(el('span', `${label} · ${counts[key]}`, `approval-badge ${style}`));
+    }
+    return row;
+  }
+  async function renderActivity(person, panel) {
+    panel.append(el('p', 'Loading knowledge base activity…'));
+    try {
+      const { knowledge_bases: bases } = await api(`/admin/users/${encodeURIComponent(person.id)}/activity`);
+      if (!panel.isConnected) return;
+      panel.replaceChildren(el('h3', `Knowledge Bases (${bases.length})`));
+      if (!bases.length) panel.append(el('p', 'This user has no knowledge bases.'));
+      for (const base of bases) {
+        const card = el('article', '', 'activity-base');
+        card.append(el('h4', base.name), el('p', `${base.pdfs} ${base.pdfs === 1 ? 'PDF' : 'PDFs'} · ${base.images} ${base.images === 1 ? 'image' : 'images'}`));
+        const approvals = activityTags(base.approvals, [
+          ['approved', 'Approved', 'approved'], ['pending', 'Awaiting approval', 'pending'],
+          ['rejected', 'Rejected', 'rejected'], ['expired', 'Expired', ''],
+        ]);
+        const processing = activityTags(base.processing, [
+          ['ready', 'Ready', 'approved'], ['queued', 'Queued', 'processing-status'],
+          ['processing', 'Processing', 'processing-status'], ['retrying', 'Retrying', 'processing-status'],
+          ['pending', 'Incomplete', 'pending'], ['failed', 'Failed', 'rejected'],
+        ]);
+        if (approvals.childElementCount) card.append(el('span', 'Upload requests', 'activity-tag-label'), approvals);
+        if (processing.childElementCount) card.append(el('span', 'Document processing', 'activity-tag-label'), processing);
+        panel.append(card);
+      }
+    } catch (error) {
+      if (panel.isConnected) panel.replaceChildren(el('p', error.message));
+    }
+  }
   function render() {
     const root = $('admin-content'); root.replaceChildren();
     if (selected) {
@@ -328,10 +362,16 @@ export function createAdminPanel({ api, user, onError, sendUpload, onReady = () 
         }
         select.value = person.policy;
         root.append(label, select, button('Save permission', () => change(`/admin/users/${person.id}/permissions`, { policy: select.value })));
+      } else if (tab === 'activity') {
+        const panel = el('section', '', 'user-activity');
+        panel.setAttribute('aria-label', 'Knowledge base activity');
+        panel.setAttribute('aria-live', 'polite');
+        root.append(panel);
+        void renderActivity(person, panel);
       } else {
         const items = requests.filter(r => r.user_id === selected);
         if (!items.length) root.append(el('p', 'No upload requests yet.'));
-        items.forEach(r => root.append(requestCard(r, tab === 'upload requests')));
+        items.forEach(r => root.append(requestCard(r, true)));
       }
     } else if (page === 'users') {
       root.append(el('h2', 'Users'), el('p', 'Account details and upload permissions. User workspaces remain private.'));

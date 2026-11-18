@@ -385,6 +385,19 @@ body:is(.admin-layout,.workspace-page) .request-card h3 { font-size:18px; overfl
 body:is(.admin-layout,.workspace-page) .request-card textarea { width:100%; }
 body:is(.admin-layout,.workspace-page) .approval-badge { font-size:12px; padding:5px 10px; border:1px solid #ffffff0b; }
 body:is(.admin-layout,.workspace-page) .user-details { font-size:13px; gap:20px 32px; }
+.user-activity { display:grid; gap:12px; }
+.user-activity > h3, .activity-base h4 { margin:0; }
+.activity-base {
+  min-width:0;
+  padding:12px 15px;
+  border:1px solid var(--dash-border);
+  border-radius:10px;
+  background:var(--dash-field);
+  overflow-wrap:anywhere;
+}
+body.workspace-page .activity-base p { margin:4px 0; color:var(--dash-muted); font-size:13px; }
+.activity-tag-label { display:block; margin:10px 0 5px; color:var(--dash-muted); font-size:12px; }
+.activity-tags { display:flex; flex-wrap:wrap; gap:6px; }
 body:is(.admin-layout,.workspace-page) :is(button,a,summary):focus-visible { outline:2px solid #8db5ff; outline-offset:3px; }
 body:is(.admin-layout,.workspace-page) footer { padding-top:32px; margin-top:24px; border-color:var(--dash-border); }
 body:is(.admin-layout,.workspace-page) #dashboard-help { border-top:0; }
