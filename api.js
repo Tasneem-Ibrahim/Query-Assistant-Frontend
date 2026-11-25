@@ -1,6 +1,12 @@
 // Tokens are managed by the backend in HttpOnly cookies, never browser storage.
 const refreshes = new Map();
 let workspaceRequests = new AbortController();
+let workspaceAccount = '';
+
+export function selectWorkspaceAccount(account = '') {
+  cancelWorkspaceRequests();
+  workspaceAccount = account;
+}
 
 export function cancelWorkspaceRequests() {
   workspaceRequests.abort();
@@ -34,6 +40,9 @@ export async function request(base, path, options = {}) {
   base = base.replace(/\/$/, '');
   const headers = new Headers(options.headers);
   headers.set('X-CSRF-Protection', '1');
+  if (workspaceAccount && /^(?:\/domains(?:\/|$)|\/upload-requests(?:\/|$)|\/uploads$)/.test(path)) {
+    headers.set('X-Workspace-Account', workspaceAccount);
+  }
   const send = () => fetch(`${base}/api${path}`, {
     ...options, signal, headers, credentials: 'include', cache: 'no-store', redirect: 'error'
   });
@@ -41,7 +50,7 @@ export async function request(base, path, options = {}) {
   try {
     response = await send();
     signal.throwIfAborted();
-    if (response.status === 401 && !['/auth/login', '/auth/admin/login', '/auth/signup', '/auth/refresh', '/auth/logout'].includes(path)) {
+    if (response.status === 401 && !path.startsWith('/auth/mfa/') && !['/auth/login', '/auth/admin/login', '/auth/signup', '/auth/accept-invite', '/auth/refresh', '/auth/logout'].includes(path)) {
       if (!refreshes.has(base)) {
         const refresh = fetch(`${base}/api/auth/refresh`, {
           method: 'POST', credentials: 'include', cache: 'no-store', redirect: 'error',
@@ -60,7 +69,7 @@ export async function request(base, path, options = {}) {
     throw new Error(`Cannot reach the backend at ${base || location.origin}. Check backend availability and the backend CORS_ORIGINS setting.`);
   }
   if (!response.ok) {
-    if (response.status === 401 && !['/auth/login', '/auth/admin/login', '/auth/signup'].includes(path) && typeof window !== 'undefined') {
+    if (response.status === 401 && !path.startsWith('/auth/mfa/') && !['/auth/login', '/auth/admin/login', '/auth/signup', '/auth/accept-invite'].includes(path) && typeof window !== 'undefined') {
       window.dispatchEvent(new Event('user-login-required'));
     }
     if (response.status === 405 && options.method === 'DELETE') {

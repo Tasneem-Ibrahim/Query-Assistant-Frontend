@@ -1,5 +1,11 @@
 // Account-scoped administration UI. All authorization remains on the backend.
-export function createAdminPanel({ api, user, onError, sendUpload, onReady = () => {}, onApprovedUploads = () => {}, onViewPdf, confirmRemoveCard, knowledgeBases, onOpenBase }) {
+export function createAdminPanel({ api, user, onError, sendUpload, onReady = () => {}, onApprovedUploads = () => {}, onViewPdf, confirmRemoveCard, knowledgeBases, workspaceAccount, onOpenBase, onManageUploads, managingUploads, addApprovalRequest, confirmApprovalDelete, onPage = () => {} }) {
+  const isAdminAccount = () => ['admin', 'super_admin'].includes(user()?.role);
+  const isSuper = () => user()?.role === 'super_admin';
+  const can = key => user()?.role === 'user' && /^(accounts|approvals)\./.test(key)
+    ? user()?.permissions?.[key] === true : user()?.permissions?.[key] !== false;
+  const hasManagement = () => isAdminAccount() || (user() && (can('accounts.view') || can('approvals.view')));
+  const pagePermissions = { 'knowledge-bases': 'bases.view', users: 'accounts.view', requests: 'approvals.view' };
   const $ = id => document.getElementById(id);
   const el = (tag, text, cls = '') => { const n = document.createElement(tag); n.textContent = text; n.className = cls; return n; };
   let generation = 0, timer, people = [], requests = [], selected = null, tab = 'overview', page = 'dashboard', filter = 'pending', busy = false;
@@ -19,16 +25,26 @@ export function createAdminPanel({ api, user, onError, sendUpload, onReady = () 
     $('dashboard-page-title').textContent = 'Workspace';
     $('workspace-title').textContent = 'Documents & assistant';
   }
+  const pages = ['users', 'requests', 'knowledge-bases'];
+  const superPages = ['roles', 'permission-list', 'permissions', 'login-logs', 'revisions', 'workspace'];
+  const workspacePages = ['workspace', 'knowledge-bases'];
+  let activeRoute;
   const paths = { home: 'm3 10 9-7 9 7v10a1 1 0 0 1-1 1h-5v-7H9v7H4a1 1 0 0 1-1-1Z',
     dashboard: 'M3 3h7v7H3z M14 3h7v7h-7z M3 14h7v7H3z M14 14h7v7h-7z',
     'knowledge-bases': 'M3 6a2 2 0 0 1 2-2h5l2 2h7a2 2 0 0 1 2 2v10a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2Z M7 11h10 M7 15h7',
     users: 'M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2 M9 3a4 4 0 1 0 0 8 4 4 0 0 0 0-8 M20 21v-2a4 4 0 0 0-3-3.87 M16 3.13a4 4 0 0 1 0 7.75',
-    requests: 'M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8Z M14 2v6h6 M8 15l3 3 5-5' };
-  document.querySelectorAll('[data-admin-page]').forEach(n => {
+    requests: 'M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8Z M14 2v6h6 M8 15l3 3 5-5',
+    workspace: 'M3 5h18v14H3z M9 5v14 M12 9h5 M12 13h5',
+    roles: 'M12 22s7-3 7-10V5l-7-3-7 3v7c0 7 7 10 7 10Z M9 12l2 2 4-4',
+    'permission-list': 'M9 6h11 M9 12h11 M9 18h11 M4 6h.01 M4 12h.01 M4 18h.01',
+    permissions: 'M3 4h18v16H3z M3 9h18 M9 9v11 M15 9v11 M3 14h18',
+    'login-logs': 'M5 4h10l4 4v12H5z M15 4v5h4 M8 12h8 M8 16h8',
+    revisions: 'M3 12a9 9 0 1 1 2.6 6.4 M3 6v6h6 M12 7v5l3 2' };
+  document.querySelectorAll('[data-admin-page], [data-super-page]').forEach(n => {
     const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
     svg.setAttribute('viewBox', '0 0 24 24'); svg.setAttribute('fill', 'none'); svg.setAttribute('stroke', 'currentColor');
     svg.setAttribute('stroke-width', '1.6'); svg.setAttribute('stroke-linejoin', 'round'); svg.setAttribute('stroke-linecap', 'round'); svg.setAttribute('aria-hidden', 'true');
-    const path = document.createElementNS(svg.namespaceURI, 'path'); path.setAttribute('d', paths[n.dataset.adminPage]); svg.append(path); n.prepend(svg);
+    const path = document.createElementNS(svg.namespaceURI, 'path'); path.setAttribute('d', paths[n.dataset.adminPage || n.dataset.superPage]); svg.append(path); n.prepend(svg);
   });
   const backdrop = document.createElement('button'); backdrop.className = 'dashboard-backdrop'; backdrop.hidden = true;
   backdrop.type = 'button'; backdrop.setAttribute('aria-label', 'Close navigation'); $('admin-app').append(backdrop);
@@ -49,7 +65,7 @@ export function createAdminPanel({ api, user, onError, sendUpload, onReady = () 
     own = { policy: 'approval_required', requests: [] };
     document.body.classList.remove('admin-layout');
     $('admin-sidebar').hidden = true; $('admin-overview').hidden = true; $('admin-content').hidden = true;
-    $('user-upload-status').hidden = true; $('workspace').hidden = false;
+    $('user-upload-status').hidden = true; $('workspace').hidden = true;
     $('admin-content').replaceChildren(); $('user-upload-status').replaceChildren();
     $('knowledge-bases').hidden = true; $('knowledge-bases-link').hidden = true;
     $('knowledge-base-list').replaceChildren();
@@ -60,18 +76,26 @@ export function createAdminPanel({ api, user, onError, sendUpload, onReady = () 
   async function refresh(background = false) {
     const version = generation;
     try {
-      const isAdmin = user()?.role === 'admin';
-      const data = await api(isAdmin ? '/admin/users' : '/upload-requests');
+      const isAdmin = isAdminAccount();
+      const canLoadAdmin = hasManagement() && (can('accounts.view') || can('approvals.view'));
+      if (!hasManagement() && !can('documents.view')) return;
+      const managed = canLoadAdmin ? await api('/admin/users') : { users: [], requests: [] };
       if (version !== generation) return;
       $('admin-sync-status').textContent = '';
-      if (isAdmin) {
-        people = data.users; requests = data.requests;
+      if (hasManagement()) {
+        people = managed.users; requests = managed.requests;
         const count = requests.filter(r => r.status === 'pending').length;
         $('admin-pending').textContent = count; $('admin-bell').textContent = `Notifications (${count})`;
         $('admin-total-users').textContent = people.length; $('admin-total-pending').textContent = count;
         const hasDraft = Array.from($('admin-content').querySelectorAll('textarea, input[type="search"]')).some(n => n.value);
         if (['users', 'requests'].includes(page) && (!background || (!hasDraft && !$('admin-content').contains(document.activeElement)))) render();
-      } else {
+        if (!landing && !managingUploads() && user()?.id !== 'local-admin' && !isSuper() && user()?.permissions?.['documents.view'] !== false) {
+          const saved = await api('/upload-requests');
+          if (version === generation) onApprovedUploads(saved.processing || []);
+        }
+      } else if (can('documents.view')) {
+        const data = await api('/upload-requests');
+        if (version !== generation) return;
         const readyDocuments = data.ready_documents || data.requests.filter(r => r.job_state === 'ready');
         const previousReady = own.ready_documents || own.requests.filter(r => r.job_state === 'ready');
         const becameReady = readyDocuments.some(r => !previousReady.some(old => old.domain === r.domain && old.file_hash === r.file_hash));
@@ -85,7 +109,7 @@ export function createAdminPanel({ api, user, onError, sendUpload, onReady = () 
         else if (becameReady) onError('Your processed document is ready. You can now ask questions and search it.');
         else if (approved) onError('Your upload was approved. It will be processed automatically; no re-upload is needed.');
       }
-    } catch (error) { if (version === generation) { if (user()?.role === 'admin') { $('admin-total-users').textContent = '—'; $('admin-total-pending').textContent = '—'; } $('admin-sync-status').textContent = error.message; onError(error.message); } }
+    } catch (error) { if (version === generation) { if (isAdminAccount()) { $('admin-total-users').textContent = '—'; $('admin-total-pending').textContent = '—'; } $('admin-sync-status').textContent = error.message; onError(error.message); } }
   }
   async function change(path, body) {
     if (busy) return;
@@ -95,43 +119,94 @@ export function createAdminPanel({ api, user, onError, sendUpload, onReady = () 
     catch (error) { if (version === generation) { $('admin-sync-status').textContent = error.message; onError(error.message); } }
     finally { if (version === generation) busy = false; }
   }
-  function navigate(next) {
+  function navigate(next, { message: knowledgeBaseMessage, historyMode = 'push' } = {}) {
+    if ((managingUploads() && next !== 'workspace') || (workspaceAccount() && !workspacePages.includes(next))) {
+      void onManageUploads(null, $('admin-sync-status'), next, historyMode);
+      return;
+    }
+    if (pagePermissions[next] && !can(pagePermissions[next])) next = isAdminAccount() ? 'dashboard' : 'workspace';
     if (next === 'home' && !landing) { location.assign('index.html'); return; }
+    if (next === 'workspace' && landing) { location.assign('workspace.html'); return; }
     if (next !== 'home' && landing) { location.assign(`dashboard.html${next === 'dashboard' ? '' : '#' + next}`); return; }
     page = next; selected = null; tab = 'overview';
     const browsing = next === 'knowledge-bases';
-    const isAdmin = user()?.role === 'admin';
+    const isAdmin = hasManagement();
     if (!landing) {
-      const hash = ['users', 'requests', 'knowledge-bases'].includes(next) ? '#' + next : '';
-      window.history.replaceState(null, '', location.pathname + location.search + hash);
+      const path = ['workspace', 'dashboard'].includes(next)
+        ? new URL(next + '.html', location.href).pathname : location.pathname;
+      const hash = next !== 'workspace' && [...pages, ...(isSuper() ? superPages : [])].includes(next) ? '#' + next : '';
+      const account = workspacePages.includes(next) ? workspaceAccount() : null;
+      const previous = activeRoute;
+      const changed = previous?.page !== next || previous?.account?.id !== account?.id;
+      const push = historyMode === 'push' && previous && changed;
+      activeRoute = { page: next, account, owner: user()?.id,
+        position: push ? previous.position + 1 : (history.state?.queryAssistantRoute?.position ?? 0) };
+      if (historyMode !== 'restore') {
+        history[push ? 'pushState' : 'replaceState']({ queryAssistantRoute: activeRoute }, '', path + location.search + hash);
+      }
     }
-    $('dashboard-page-title').textContent = ({ dashboard: 'Dashboard', users: 'Users', requests: 'Upload requests', 'knowledge-bases': 'Knowledge Bases' })[next] || 'Workspace';
+    $('dashboard-page-title').textContent = ({ dashboard: 'Dashboard', users: 'Users', requests: 'Upload requests', 'knowledge-bases': 'Knowledge Bases', roles: 'Role Management', 'permission-list': 'Permissions List', permissions: 'Permission Matrix', 'login-logs': 'Logs Management', revisions: 'Revision' })[next] || 'Workspace';
     const home = next === 'home';
     document.body.classList.toggle('admin-layout', isAdmin && !home);
     $('admin-sidebar').hidden = !isAdmin || home; $('admin-menu-toggle').hidden = !isAdmin || home;
     $('admin-dashboard-entry').hidden = !home; $('admin-sync').hidden = home || browsing;
-    $('admin-bell').hidden = !isAdmin || home;
-    $('workspace').hidden = !['home', 'dashboard', 'workspace'].includes(next);
-    $('admin-overview').hidden = next !== 'dashboard';
+    $('admin-bell').hidden = !isAdmin || home || !can('approvals.view');
+    $('workspace').hidden = next !== 'workspace' && (next !== 'dashboard' || isSuper());
+    $('super-workspace-scope').hidden = !(isSuper() || managingUploads())
+      || next !== 'workspace' || !$('super-workspace-scope').textContent;
+    document.querySelectorAll('[data-super-page]').forEach(button => {
+      button.hidden = !isSuper();
+      button.setAttribute('aria-current', button.dataset.superPage === next ? 'page' : 'false');
+    });
+    $('super-settings-label').hidden = !isSuper();
+    onPage(next);
+    $('admin-overview').hidden = next !== 'dashboard' || user()?.role !== 'admin';
     $('admin-content').hidden = !['users', 'requests'].includes(next);
     $('knowledge-bases').hidden = !browsing;
     const browseLink = $('knowledge-bases-link');
-    browseLink.hidden = isAdmin || landing;
+    browseLink.hidden = isAdmin || landing || !can('bases.view');
     browseLink.href = browsing ? 'workspace.html' : '#knowledge-bases';
     browseLink.textContent = browsing ? 'Workspace' : 'Knowledge Bases';
-    document.querySelectorAll('[data-admin-page]').forEach(n => n.setAttribute('aria-current', n.dataset.adminPage === next ? 'page' : 'false'));
+    document.querySelectorAll('[data-admin-page]').forEach(n => {
+      const permission = pagePermissions[n.dataset.adminPage];
+      n.hidden = Boolean(permission && !can(permission));
+      n.setAttribute('aria-current', n.dataset.adminPage === next ? 'page' : 'false');
+    });
     closeNavigation();
     if (browsing) {
-      renderKnowledgeBases();
+      renderKnowledgeBases(knowledgeBaseMessage);
       $('knowledge-bases-title').focus({ preventScroll: true });
     }
     if (['users', 'requests'].includes(next)) render();
     window.scrollTo({ top: 0, behavior: 'instant' });
   }
-  async function loadBaseDocuments(domain, details, list, count) {
+  async function restoreRoute(route, fallback, historyMode) {
+    const previous = activeRoute;
+    const allowedPages = isSuper() ? ['dashboard', ...pages, ...superPages]
+      : hasManagement() ? ['dashboard', 'workspace', ...pages] : workspacePages;
+    const validRoute = route?.owner === user()?.id && allowedPages.includes(route?.page);
+    const next = validRoute ? route.page : fallback;
+    const account = validRoute && workspacePages.includes(next)
+      && (isSuper() || (isAdminAccount() && next === 'workspace')) ? route.account : null;
+    if (workspaceAccount()?.id !== account?.id) {
+      const switched = await onManageUploads(account, $('admin-sync-status'), next, historyMode);
+      if (switched === false && historyMode === 'restore' && previous && route.position !== previous.position) {
+        history.go(previous.position - route.position);
+      }
+    } else {
+      navigate(next, { historyMode });
+    }
+  }
+  window.addEventListener('popstate', event => {
+    const route = event.state?.queryAssistantRoute;
+    if (!landing && user() && route?.owner === user().id) void restoreRoute(route, 'workspace', 'restore');
+  });
+  async function loadBaseDocuments(domain, details, list, count, requestsForView) {
     list.replaceChildren(el('p', 'Loading documents…'));
     try {
-      const status = await api(`/domains/${encodeURIComponent(domain.key)}/status`);
+      const [status, uploadRequests] = await Promise.all([
+        api(`/domains/${encodeURIComponent(domain.key)}/status`), requestsForView,
+      ]);
       if (!details.isConnected || page !== 'knowledge-bases') return;
       const files = new Map();
       for (const [hash, file] of Object.entries(status.pending_files || {})) {
@@ -140,7 +215,7 @@ export function createAdminPanel({ api, user, onError, sendUpload, onReady = () 
       for (const [hash, file] of Object.entries(status.files || {})) {
         files.set(hash, { filename: file.name, status: 'Ready' });
       }
-      for (const request of own.requests) {
+      for (const request of uploadRequests ?? own.requests) {
         if (request.domain !== domain.key || files.get(request.file_hash)?.status === 'Ready') continue;
         if (request.status === 'pending') files.set(request.file_hash || request.id, { filename: request.filename, status: 'Awaiting approval' });
         if (request.status === 'approved' && ['queued', 'processing', 'retrying', 'failed'].includes(request.job_state)) {
@@ -162,12 +237,24 @@ export function createAdminPanel({ api, user, onError, sendUpload, onReady = () 
       if (details.isConnected && page === 'knowledge-bases') list.replaceChildren(el('p', 'Could not load PDFs. Close and reopen this knowledge base to retry.'));
     }
   }
-  function renderKnowledgeBases() {
+  function renderKnowledgeBases(message) {
+    if (page !== 'knowledge-bases') return;
     const root = $('knowledge-base-list');
     const domains = knowledgeBases();
+    const account = isSuper() ? workspaceAccount() : null;
     const loadCards = [];
+    $('knowledge-bases-description').textContent = account
+      ? `Knowledge bases and documents for ${account.name || account.email}`
+      : 'Browse your knowledge bases and their documents.';
     root.replaceChildren();
-    if (!domains.length) root.append(el('p', 'No knowledge bases to show. Create one in Workspace.'));
+    if (message) {
+      root.append(el('p', message));
+      return;
+    }
+    if (!domains.length) root.append(el('p', account ? 'This account has no knowledge bases.' : 'No knowledge bases to show. Create one in Workspace.'));
+    const requestsForView = account && domains.length
+      ? api('/upload-requests').then(data => data.requests || []).catch(() => [])
+      : null;
     for (const domain of domains) {
       const card = el('article', '', 'panel knowledge-base-card');
       const details = el('details', '');
@@ -191,7 +278,7 @@ export function createAdminPanel({ api, user, onError, sendUpload, onReady = () 
       const load = async () => {
         if (loading || !card.isConnected || page !== 'knowledge-bases') return;
         loading = true;
-        await loadBaseDocuments(domain, details, list, count);
+        await loadBaseDocuments(domain, details, list, count, requestsForView);
         loading = false;
         count.hidden = !count.textContent;
       };
@@ -202,10 +289,11 @@ export function createAdminPanel({ api, user, onError, sendUpload, onReady = () 
         const opened = await onOpenBase(domain.key);
         if (version !== generation || !card.isConnected || page !== 'knowledge-bases') return;
         if (!opened) return;
-        navigate(user()?.role === 'admin' ? 'dashboard' : 'workspace');
+        navigate('workspace');
         $('workspace').scrollIntoView({ block: 'start' });
         $('domain').focus({ preventScroll: true });
       });
+      open.classList.add('open-workspace-action');
       card.append(details, open);
       root.append(card);
     }
@@ -240,10 +328,10 @@ export function createAdminPanel({ api, user, onError, sendUpload, onReady = () 
   }
   function requestCard(r, decisions) {
     const card = el('article', '', 'request-card');
-    if (user()?.role !== 'admin') { card.classList.add('user-upload-card'); card.append(deleteCardButton(r)); }
+    if (!decisions && !isAdminAccount()) { card.classList.add('user-upload-card'); card.append(deleteCardButton(r)); }
     const person = people.find(p => p.id === r.user_id);
     const active = r.status === 'approved' && ['queued','processing','retrying'].includes(r.job_state);
-    if (user()?.role !== 'admin' && r.status === 'approved') {
+    if (!decisions && !isAdminAccount() && r.status === 'approved') {
       card.append(el('h3', r.filename), el('span', 'Approved', 'approval-badge approved'));
       const base = el('p', '', 'request-user-details');
       base.append(el('strong', 'Knowledge base: ', 'request-detail-label'), document.createTextNode(r.domain_label)); card.append(base);
@@ -271,7 +359,7 @@ export function createAdminPanel({ api, user, onError, sendUpload, onReady = () 
     const label = r.status === 'pending' ? 'Pending approval' : active ? 'Processing' : r.status === 'approved' && ['ready','failed'].includes(r.job_state) ? r.job_state : r.status;
     const badge = active ? 'processing-status' : label === 'ready' ? 'approved' : label === 'failed' ? 'rejected' : r.status;
     card.append(el('h3', r.filename), el('span', label, `approval-badge ${badge}`),
-      el('p', person ? `${person.name} · ${person.email}` : 'Your upload', 'request-user-details request-user-identity'),
+      el('p', person ? `${person.name} · ${person.email}` : r.user_id === user()?.id ? 'Your upload' : '', 'request-user-details request-user-identity'),
       el('p', '', 'request-file-details'),
       el('p', `Requested ${date(r.created_at)}`));
     card.querySelector('.request-file-details').append(el('strong', 'Pages: ', 'request-detail-label'),
@@ -289,7 +377,7 @@ export function createAdminPanel({ api, user, onError, sendUpload, onReady = () 
     if (r.status === 'approved') card.append(el('p', r.file_ready ? 'Your upload is approved. No re-upload is needed.' : 'Approval granted. Select the original file once to save it for automatic processing.'));
     if (r.job_message && (r.status === 'expired' || ['ready','failed','retrying'].includes(r.job_state))) card.append(el('p', r.job_message));
     if (r.file_ready === false && r.status === 'pending') card.append(el('p', 'The saved file is not available yet. Select the file once to finish uploading.'));
-    if (decisions && r.status === 'pending') {
+    if (decisions && can('approvals.edit') && r.status === 'pending' && (isAdminAccount() || r.user_id !== user()?.id)) {
       const reason = document.createElement('textarea'); reason.placeholder = 'Reason (optional)'; reason.maxLength = 500;
       reason.setAttribute('aria-label', `Decision reason for ${r.filename}`);
       const actions = el('div', '', 'admin-actions');
@@ -300,7 +388,64 @@ export function createAdminPanel({ api, user, onError, sendUpload, onReady = () 
       if (r.decision_ready === false) card.append(el('p', 'The file upload is incomplete. Approval actions will become available after the user finishes uploading.'));
       card.append(reason, actions);
     }
+    if (decisions && (isSuper() || user()?.permissions?.['approvals.delete'] === true)) {
+      const remove = button('Delete request', async () => {
+        if (!await confirmApprovalDelete(r)) return;
+        remove.disabled = true;
+        try {
+          await api('/admin/upload-requests/' + encodeURIComponent(r.id), undefined, 'DELETE');
+          await refresh();
+        } catch (error) { onError(error.message); }
+        finally { remove.disabled = false; }
+      });
+      remove.classList.add('decision-reject');
+      card.append(remove);
+    }
     return card;
+  }
+
+  function approvalForm(person) {
+    const details = el('details', '', 'super-role-status');
+    details.append(el('summary', 'Add approval request'));
+    const form = el('form', '', 'super-admin-form');
+    const select = document.createElement('select');
+    select.name = 'domain'; select.required = true;
+    const file = document.createElement('input');
+    file.name = 'file'; file.type = 'file'; file.required = true;
+    file.accept = '.pdf,.jpg,.jpeg,.png,.jfif,.webp,.bmp,.tif,.tiff,.avif';
+    const submit = el('button', 'Add request', 'button primary');
+    submit.disabled = true;
+    const feedback = el('p', '', '');
+    feedback.setAttribute('role', 'status');
+    for (const [caption, control] of [['Knowledge base', select], ['PDF or image', file]]) {
+      const label = el('label', caption);
+      label.append(control);
+      form.append(label);
+    }
+    form.append(submit);
+    details.append(form, feedback);
+    details.addEventListener('toggle', async () => {
+      if (!details.open || select.options.length) return;
+      feedback.textContent = 'Loading knowledge bases…';
+      try {
+        const bases = await api('/admin/upload-requests/for/' + encodeURIComponent(person.id));
+        if (!details.isConnected) return;
+        select.replaceChildren(...bases.map(base => new Option(base.label, base.key)));
+        submit.disabled = !bases.length;
+        feedback.textContent = bases.length ? '' : 'This user has no knowledge bases.';
+      } catch (error) { feedback.textContent = error.message; }
+    });
+    form.addEventListener('submit', async event => {
+      event.preventDefault();
+      if (submit.disabled) return;
+      submit.disabled = true;
+      try {
+        await addApprovalRequest(person.id, new FormData(form));
+        await refresh();
+      } catch (error) { feedback.textContent = error.message; }
+      finally { submit.disabled = false; }
+    });
+    return details;
   }
   function activityTags(counts, statuses) {
     const row = el('div', '', 'activity-tags');
@@ -342,14 +487,26 @@ export function createAdminPanel({ api, user, onError, sendUpload, onReady = () 
       const person = people.find(p => p.id === selected);
       if (!person) { selected = null; render(); return; }
       root.append(button('← All users', () => { selected = null; render(); }), el('h2', person.name || person.email));
+      if (user()?.role === 'admin' && user()?.permissions?.['user_uploads.view'] === true && can('bases.view')) {
+        root.append(button('Manage uploads', () => onManageUploads(person, $('admin-sync-status'))));
+      }
       const tabs = el('div', '', 'admin-actions');
-      for (const name of ['overview', 'permissions', 'upload requests', 'activity']) {
+      const visibleTabs = ['overview'];
+      if (can('approvals.view')) {
+        if (isAdminAccount()) visibleTabs.push('permissions');
+        visibleTabs.push('upload requests');
+        if (isAdminAccount() && can('bases.view') && can('documents.view')) visibleTabs.push('activity');
+      }
+      if (!visibleTabs.includes(tab)) tab = 'overview';
+      for (const name of visibleTabs) {
         const b = button(name, () => { tab = name; render(); }); b.setAttribute('aria-pressed', String(tab === name)); tabs.append(b);
       }
       root.append(tabs);
       if (tab === 'overview') {
         const details = el('dl', '', 'user-details');
-        for (const [label, value] of [['Name', person.name], ['Email', person.email], ['User ID', person.id], ['Joined', date(person.created_at)], ['Upload policy', person.policy.replaceAll('_', ' ')], ['Pending requests', person.pending]]) {
+        const fields = [['Name', person.name], ['Email', person.email], ['User ID', person.id], ['Joined', date(person.created_at)]];
+        if (can('approvals.view')) fields.push(['Upload policy', person.policy.replaceAll('_', ' ')], ['Pending requests', person.pending]);
+        for (const [label, value] of fields) {
           details.append(el('dt', label), el('dd', String(value ?? '—')));
         }
         root.append(details);
@@ -361,7 +518,9 @@ export function createAdminPanel({ api, user, onError, sendUpload, onReady = () 
           const option = el('option', text); option.value = value; select.append(option);
         }
         select.value = person.policy;
-        root.append(label, select, button('Save permission', () => change(`/admin/users/${person.id}/permissions`, { policy: select.value })));
+        select.disabled = !can('approvals.edit');
+        root.append(label, select);
+        if (can('approvals.edit')) root.append(button('Save permission', () => change(`/admin/users/${person.id}/permissions`, { policy: select.value })));
       } else if (tab === 'activity') {
         const panel = el('section', '', 'user-activity');
         panel.setAttribute('aria-label', 'Knowledge base activity');
@@ -370,11 +529,12 @@ export function createAdminPanel({ api, user, onError, sendUpload, onReady = () 
         void renderActivity(person, panel);
       } else {
         const items = requests.filter(r => r.user_id === selected);
+        if (isSuper() || user()?.permissions?.['approvals.add'] === true) root.append(approvalForm(person));
         if (!items.length) root.append(el('p', 'No upload requests yet.'));
         items.forEach(r => root.append(requestCard(r, true)));
       }
     } else if (page === 'users') {
-      root.append(el('h2', 'Users'), el('p', 'Account details and upload permissions. User workspaces remain private.'));
+      root.append(el('h2', 'Users'), el('p', 'View account details and manage uploads with your assigned permissions.'));
       const search = document.createElement('input'); search.type = 'search'; search.placeholder = 'Search by name or email'; search.setAttribute('aria-label', 'Search users');
       const list = el('div', '', 'admin-user-list');
       const draw = () => {
@@ -420,7 +580,7 @@ export function createAdminPanel({ api, user, onError, sendUpload, onReady = () 
     own.requests.forEach(r => details.append(requestCard(r, false))); root.append(details);
   }
   async function prepare(file, domain, useLlm = true) {
-    if (user()?.role === 'admin') return true;
+    if (isAdminAccount()) return true;
     const version = generation;
     const data = new FormData(); data.append('domain',domain); data.append('file',file);
     data.append('message',message); data.append('use_llm',useLlm);
@@ -440,21 +600,28 @@ export function createAdminPanel({ api, user, onError, sendUpload, onReady = () 
     await refresh();
     return row;
   }
-  async function start() {
+  async function start(onRouteReady) {
     const version = generation;
-    const isAdmin = user()?.role === 'admin';
+    const isAdmin = hasManagement();
     document.body.classList.toggle('admin-layout', isAdmin);
     $('admin-sidebar').hidden = !isAdmin; $('admin-bell').hidden = !isAdmin; $('admin-menu-toggle').hidden = !isAdmin;
     const requestedPage = location.hash.slice(1);
-    if (isAdmin) navigate(landing ? 'home' : ['users', 'requests', 'knowledge-bases'].includes(requestedPage) ? requestedPage : 'dashboard');
-    else if (!landing) navigate(requestedPage === 'knowledge-bases' ? requestedPage : 'workspace');
-    if (landing) $('workspace').hidden = true;
+    if (isAdmin) {
+      const defaultPage = user()?.role === 'user' || location.pathname.endsWith('/workspace.html') ? 'workspace' : 'dashboard';
+      const allowedPages = [...pages, ...(isSuper() ? superPages : [])];
+      await restoreRoute(history.state?.queryAssistantRoute, landing ? 'home' : allowedPages.includes(requestedPage) ? requestedPage : defaultPage, 'replace');
+    }
+    else if (!landing) await restoreRoute(history.state?.queryAssistantRoute, requestedPage === 'knowledge-bases' ? requestedPage : 'workspace', 'replace');
+    if (version !== generation) return;
     $('admin-dashboard-entry').textContent = 'Dashboard';
     $('admin-dashboard-entry').href = isAdmin ? 'dashboard.html' : 'workspace.html';
     $('admin-dashboard-entry').hidden = !landing;
+    onRouteReady();
+    if (page === 'knowledge-bases') $('knowledge-bases-title').focus({ preventScroll: true });
     await refresh(); if (version === generation) timer = setInterval(() => refresh(true), 30000);
   }
   document.querySelectorAll('[data-admin-page]').forEach(n => n.addEventListener('click', () => navigate(n.dataset.adminPage)));
+  document.querySelectorAll('[data-super-page]').forEach(n => n.addEventListener('click', () => navigate(n.dataset.superPage)));
   $('knowledge-bases-link').addEventListener('click', event => {
     event.preventDefault();
     navigate(page === 'knowledge-bases' ? 'workspace' : 'knowledge-bases');
@@ -470,7 +637,7 @@ export function createAdminPanel({ api, user, onError, sendUpload, onReady = () 
     if (backdrop.hidden) return;
     if (event.key === 'Escape') { closeNavigation(true); return; }
     if (event.key === 'Tab') {
-      const items = [...$('admin-sidebar').querySelectorAll('a[href], button')];
+      const items = [...$('admin-sidebar').querySelectorAll('a[href], button:not([hidden])')];
       const first = items[0], last = items.at(-1);
       if (event.shiftKey && document.activeElement === first) { event.preventDefault(); last.focus(); }
       else if (!event.shiftKey && document.activeElement === last) { event.preventDefault(); first.focus(); }
@@ -479,7 +646,7 @@ export function createAdminPanel({ api, user, onError, sendUpload, onReady = () 
   function fileChanged(file, domain) {
     if (file !== selectedFile || domain !== selectedDomain) message = '';
     selectedFile = file; selectedDomain = domain;
-    if (user() && user().role !== 'admin') renderOwn();
+    if (user() && !isAdminAccount()) renderOwn();
   }
-  return { start, reset, prepare, fileChanged, refresh };
+  return { start, reset, prepare, fileChanged, refresh, navigate, renderKnowledgeBases };
 }

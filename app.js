@@ -1,14 +1,16 @@
 import { createVoiceInput } from './voice.js';
-import { request, readEvents, runJobs, resolveBackendBase, cancelWorkspaceRequests } from './api.js';
+import { request, readEvents, runJobs, resolveBackendBase, cancelWorkspaceRequests, selectWorkspaceAccount } from './api.js';
 import { backendUrl } from './config.js';
 import { createWorkspaceGuide } from './onboarding.js';
 import { createAdminPanel } from './admin-panel.js';
+import { createSuperAdminPanel } from './super-admin.js';
 import { createSavedProcessor } from './saved-processing.js';
 
 // Supabase email links can redirect with tokens in the fragment. Sign in through
 // the cookie endpoint instead, and remove those credentials from browser history.
 const authReturn = new URLSearchParams(location.hash.slice(1));
-if (authReturn.has('access_token') || authReturn.has('refresh_token') || authReturn.has('error_description')) {
+let inviteToken = authReturn.get('qa_invite') || '';
+if (inviteToken || authReturn.has('access_token') || authReturn.has('refresh_token') || authReturn.has('error_description')) {
   window.history.replaceState(null, '', location.pathname + location.search);
 }
 
@@ -18,7 +20,7 @@ try { savedBase = localStorage.getItem('pagewise-api') || ''; } catch { /* Stora
 let base = resolveBackendBase(location.hostname, location.origin, backendUrl, savedBase);
 const state = { domains: [], key: '', status: null, online: false, busy: false, mode: 'chat', histories: {}, results: {}, file: null, generation: 0, user: null };
 const savedProcessor = createSavedProcessor({
-  canRun: () => state.user?.role === 'user' && document.body.classList.contains('workspace-page') && state.online && !state.busy && ![...pdfTabs.values()].some(tab => tab.isDirty?.()),
+  canRun: () => state.user && state.user.id !== 'local-admin' && state.user.role !== 'super_admin' && permitted('documents.add') && document.body.classList.contains('workspace-page') && state.online && !state.busy && ![...pdfTabs.values()].some(tab => tab.isDirty?.()),
   onStart: row => {
     state.busy = true; controls(); $('processing').hidden = false;
     $('processing-status').textContent = 'Processing'; $('processing-status').className = 'approval-badge processing-status';
@@ -41,12 +43,69 @@ const savedProcessor = createSavedProcessor({
     }
   }
 });
+let managedUploadAccount = null;
+let selectedWorkspaceAccount = null;
+
+async function switchWorkspace(person, status, destination = person ? 'workspace' : 'users', historyMode = 'push') {
+  const delegated = state.user?.role === 'admin' && Boolean(person);
+  if (state.busy || [...pdfTabs.values()].some(tab => tab.isDirty?.())) {
+    status.textContent = 'Finish processing or save your document edits before switching workspaces.';
+    return false;
+  }
+  ++state.generation;
+  managedUploadAccount = delegated ? person : null;
+  selectedWorkspaceAccount = person || null;
+  document.body.classList.toggle('managed-uploads', delegated);
+  $('workspace-title').textContent = delegated ? 'User uploads' : 'Documents & assistant';
+  selectWorkspaceAccount(person?.id);
+  if (originalPdfDialog.open) originalPdfDialog.close();
+  clearPdfTabs();
+  clearImageText();
+  voice.cancel({ restore: false });
+  state.online = false;
+  state.histories = {}; state.results = {}; state.status = null;
+  state.domains = []; state.key = ''; state.file = null;
+  $('pdf').value = ''; $('selected-file').textContent = '';
+  $('question').value = ''; $('logs').textContent = ''; $('processing').hidden = true;
+  const scope = $('super-workspace-scope');
+  scope.textContent = person ? (delegated ? 'Managing uploads for ' : 'Viewing workspace for ') + (person.email || person.name) : '';
+  adminPanel.fileChanged(null, '');
+  renderDomainOptions();
+  renderMessages();
+  renderStatus();
+  const browsing = destination === 'knowledge-bases' && Boolean(person);
+  adminPanel.navigate(destination, { message: browsing ? 'Loading knowledge bases…' : undefined, historyMode });
+  const connection = connect();
+  const generation = state.generation;
+  const error = await connection;
+  if (browsing && generation === state.generation) adminPanel.renderKnowledgeBases(error);
+  return true;
+}
+
+const superPanel = createSuperAdminPanel({
+  user: () => state.user,
+  exportLogs: async () => (await request(base, '/super-admin/login-logs.csv')).blob(),
+  api: async (path, method = 'GET', body) => (await request(base, path, {
+    method, ...(body ? { headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) } : {}),
+  })).json(),
+  openWorkspace: switchWorkspace,
+  openKnowledgeBases: (person, status) => switchWorkspace(person, status, 'knowledge-bases'),
+  confirmDeletion: (...args) => confirmDeletion(...args),
+});
 const adminPanel = createAdminPanel({ user: () => state.user, onError: message => notice(message),
+  onManageUploads: switchWorkspace,
+  managingUploads: () => Boolean(managedUploadAccount),
+  addApprovalRequest: (owner, data) => request(base, '/admin/upload-requests/for/' + encodeURIComponent(owner),
+    { method: 'POST', body: data }).then(response => response.json()),
+  confirmApprovalDelete: row => confirmDeletion('Delete approval request?',
+    `Remove the approval request for "${row.filename}"? Documents already in the user's knowledge base stay there.`, 'Delete request'),
   sendUpload: data => request(base, '/uploads', { method:'POST', body:data }).then(response => response.json()),
   onReady: rows => refreshApprovedDocuments(rows).catch(error => notice(error.message)),
   onApprovedUploads: rows => savedProcessor.enqueue(rows),
   onViewPdf: row => viewOriginalPdf(row),
   knowledgeBases: () => state.domains,
+  workspaceAccount: () => selectedWorkspaceAccount,
+  onPage: page => superPanel.show(page),
   onOpenBase: async key => {
     if (key === state.key) return true;
     if (state.busy || !state.domains.some(domain => domain.key === key)) return false;
@@ -66,14 +125,21 @@ const authChanges = typeof BroadcastChannel === 'function' ? new BroadcastChanne
 const history = () => state.histories[state.key] ||= [];
 function node(tag, className, text) { const el = document.createElement(tag); if (className) el.className = className; if (text !== undefined) el.textContent = text; return el; }
 function notice(message = '') { $('notice').textContent = message; $('notice').hidden = !message; }
+function permitted(key) { return state.user?.permissions?.[key] !== false; }
 function controls() {
   savedProcessor.kick();
   const unavailable = !state.online || state.busy;
   for (const id of ['domain', 'bundled', 'refresh', 'reset', 'new-domain', 'rename-domain', 'delete-domain']) $(id).disabled = unavailable;
-  $('delete-domain').disabled = unavailable || !state.domains.find(d => d.key === state.key)?.custom;
+  $('new-domain').disabled ||= !permitted('bases.add');
+  $('delete-domain').disabled = unavailable || !permitted('bases.delete') || !permitted('documents.delete') || !state.domains.find(d => d.key === state.key)?.custom;
   for (const id of ['pdf', 'bundled', 'refresh', 'reset', 'rename-domain']) $(id).disabled = unavailable || !state.key;
+  $('rename-domain').disabled ||= !permitted('bases.edit');
+  for (const id of ['pdf', 'bundled']) $(id).disabled ||= !permitted('documents.add');
+  if (managedUploadAccount) $('pdf').disabled ||= !permitted('user_uploads.add');
+  $('reset').disabled ||= !permitted('bases.delete') || !permitted('documents.delete');
   document.querySelectorAll('.view-image-text, .view-pdf').forEach(button => { button.disabled = unavailable || button.dataset.ready === 'false'; });
-  $('upload').disabled = unavailable || !state.key || !state.file;
+  $('upload').disabled = unavailable || !state.key || !state.file || !permitted('documents.add')
+    || Boolean(managedUploadAccount && !permitted('user_uploads.add'));
   const uploadNote = $('upload-request-message'); if (uploadNote) uploadNote.disabled = $('upload').disabled;
   $('question').disabled = unavailable || !state.status?.chunks;
   if (unavailable || !state.status?.chunks) voice.pause('Paused while the workspace is unavailable. Resume when ready.');
@@ -82,10 +148,13 @@ function controls() {
   $('send').disabled = unavailable || !state.status?.chunks || (!$('question').value.trim() && !voiceState.interim.trim());
   renderVoice();
   $('clear').disabled = state.busy;
-  document.querySelectorAll('.delete-document').forEach(button => { button.disabled = unavailable; });
+  document.querySelectorAll('.delete-document').forEach(button => {
+    button.disabled = unavailable || !permitted('documents.delete') || Boolean(managedUploadAccount && !permitted('user_uploads.delete'));
+  });
   $('chat-mode').disabled = state.busy;
   $('search-mode').disabled = state.busy;
-  $('force').disabled = state.busy;
+  $('force').disabled = state.busy || !permitted('documents.edit');
+  if (!permitted('documents.edit')) $('force').checked = false;
   if (state.cloud) { $('reset').disabled = true; $('force').disabled = true; $('force').checked = false; }
 }
 async function json(path, body) { return (await request(base, path, body === undefined ? {} : { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) })).json(); }
@@ -100,13 +169,21 @@ function sourceList(sources) {
   }
   return details;
 }
+function workspaceSparkle() {
+  const icon = node('div', 'empty-symbol ai-empty-icon workspace-hero-icon');
+  icon.append(node('span', '', '✦'));
+  return icon;
+}
 function renderMessages() {
   const box = $('messages'); box.replaceChildren();
   if (!state.key) {
     const empty = node('div', 'chat-empty');
     const fresh = state.online && !state.domains.length;
     if (document.body.classList.contains('workspace-page')) {
-      const icon = node('div', 'empty-symbol ai-empty-icon', '✦'); icon.setAttribute('aria-hidden', 'true'); empty.append(icon);
+      empty.classList.add('workspace-start');
+      const icon = workspaceSparkle();
+      icon.setAttribute('aria-hidden', 'true');
+      empty.append(icon);
     }
     empty.append(node('h4', '', fresh ? 'Your workspace starts here.' : 'Select your knowledge base'), node('p', '', fresh ? 'Create your first knowledge base, then upload a PDF or image to start exploring your documents.' : 'Choose a knowledge base from the dropdown to view your documents and start asking questions.'));
     if (fresh) {
@@ -121,9 +198,12 @@ function renderMessages() {
   if (!messages.length) {
     const empty = node('div', 'chat-empty');
     const isWorkspace = document.body.classList.contains('workspace-page');
+    if (isWorkspace) empty.classList.add('workspace-start');
     const heading = state.mode === 'search' ? 'Find the passage you need.' :
       'From Questions to Clarity,\nFrom Data to Insights';
-    const icon = node('div', 'empty-symbol ai-empty-icon', state.mode === 'chat' ? '✦' : '⌕');
+    const icon = isWorkspace && state.mode === 'chat'
+      ? workspaceSparkle()
+      : node('div', 'empty-symbol ai-empty-icon', state.mode === 'chat' ? '✦' : '⌕');
     icon.setAttribute('aria-hidden', 'true');
     const title = node('h4', state.mode === 'chat' ? 'clarity-quote' : '', heading);
     if (isWorkspace) title.classList.add('assistant-prompt-title');
@@ -171,13 +251,13 @@ function renderStatus() {
     heading.append(title, remove);
     info.append(heading, node('small', '', state.status?.pending_files?.[fileHash] ? `${file.pages} pages · Processing incomplete` : `${file.pages} pages · ${file.chunks} passages`));
     const isImage = /\.(jpe?g|png|jfif|webp|bmp|tiff?|avif)$/i.test(file.name);
-    if (isImage && !state.status?.pending_files?.[fileHash]) {
+    if (!managedUploadAccount && isImage && !state.status?.pending_files?.[fileHash]) {
       const view = node('button', 'view-image-text', 'View text');
       view.type = 'button'; view.setAttribute('aria-label', `View extracted text from ${file.name}`);
       view.addEventListener('click', () => showImageText(fileHash));
       info.append(view);
     }
-    if (/\.pdf$/i.test(file.name) || isImage) {
+    if (!managedUploadAccount && (/\.pdf$/i.test(file.name) || isImage)) {
       const view = node('button', 'button secondary view-pdf', 'View document');
       view.type = 'button'; view.setAttribute('aria-label', `View and edit processed chunks: ${file.name}`);
       view.dataset.ready = state.status?.pending_files?.[fileHash] ? 'false' : 'true';
@@ -466,22 +546,28 @@ async function refreshApprovedDocuments(rows = []) {
   }
   await refresh();
 }
+let confirmationPending = false;
 function confirmDeletion(title, description, actionLabel = 'Permanently delete') {
   const dialog = $('delete-document-dialog');
-  if (dialog.open) return Promise.resolve(false);
+  if (confirmationPending || dialog.open) return Promise.resolve(false);
   $('delete-document-title').textContent = title;
   $('delete-document-description').textContent = description;
   $('confirm-permanent-delete').textContent = actionLabel;
   dialog.returnValue = 'cancel';
+  confirmationPending = true;
   return new Promise(resolve => {
-    dialog.addEventListener('close', () => resolve(dialog.returnValue === 'delete'), { once: true });
+    dialog.addEventListener('close', () => {
+      confirmationPending = false;
+      resolve(dialog.returnValue === 'delete');
+    }, { once: true });
     dialog.showModal();
   });
 }
 async function deleteDocument(fileHash, filename) {
   if (state.busy || !state.online || !state.key) return;
   const key = state.key, generation = state.generation;
-  const confirmed = await confirmDeletion('Delete document?', `Permanently delete "${filename}"? The saved file and its searchable passages will be removed. This cannot be undone.`);
+  const location = managedUploadAccount ? ` from ${managedUploadAccount.email || managedUploadAccount.name}’s workspace` : '';
+  const confirmed = await confirmDeletion('Delete document?', `Permanently delete "${filename}"${location}? The saved file and its searchable passages will be removed. This cannot be undone.`);
   if (!confirmed || state.busy || !state.online || key !== state.key || generation !== state.generation) return;
   state.busy = true; controls();
   try {
@@ -541,8 +627,12 @@ async function connect() {
   try {
     const health = await json('/health');
     if (generation !== state.generation) return;
+    if (state.user?.access_suspended) {
+      notice('Admin workspace access is paused. Contact Super Admin.');
+      return;
+    }
     if (!health.ok) throw new Error(health.configuration_errors?.join('. ') || 'Backend is not configured.');
-    const domains = await json('/domains');
+    const domains = permitted('bases.view') ? await json('/domains') : [];
     if (generation !== state.generation) return;
     if (!Array.isArray(domains)) throw new Error('Invalid knowledge base response from the backend.');
     state.cloud = health.storage === 'supabase';
@@ -550,11 +640,12 @@ async function connect() {
     renderDomainOptions();
     await selectDomain();
     if (generation !== state.generation) return;
-    if (!document.body.classList.contains('landing-page')) guide.show(state.user, state.domains);
+    if (!document.body.classList.contains('landing-page') && permitted('bases.add')) guide.show(state.user, state.domains);
     if (!health.deepseek_key) notice('Backend connected. Set DEEPSEEK_API_KEY in the backend .env to generate answers. You can still process PDFs and search passages.');
   } catch (e) {
     if (generation !== state.generation) return;
     state.online = false; $('domain').replaceChildren(node('option', '', 'Backend unavailable')); notice(e.message);
+    return e.message;
   } finally { if (generation === state.generation) controls(); }
 }
 function chooseFile(file) {
@@ -613,7 +704,8 @@ async function ingest(bundled) {
       }
     } else await readEvents(response, onEvent);
     if (generation !== state.generation) return;
-    state.file = null; $('pdf').value = ''; $('selected-file').textContent = ''; notice('Your knowledge is ready. Ask a question or search the passages.');
+    state.file = null; $('pdf').value = ''; $('selected-file').textContent = '';
+    notice(managedUploadAccount ? 'The file is ready in the user workspace.' : 'Your knowledge is ready. Ask a question or search the passages.');
     $('processing-status').textContent = 'Ready'; $('processing-status').className = 'approval-badge approved';
   } catch (e) {
     if (generation === state.generation) {
@@ -628,7 +720,7 @@ async function ingest(bundled) {
       await refresh();
       if (generation !== state.generation) return;
       const image = imageName && Object.entries(state.status?.files || {}).find(([, file]) => file.name === imageName);
-      if (image) await showImageText(image[0]);
+      if (image && !managedUploadAccount) await showImageText(image[0]);
     } catch (e) { if (generation === state.generation) notice(e.message); }
     if (generation === state.generation) { state.busy = false; controls(); }
   }
@@ -752,9 +844,16 @@ $('toggle-password').addEventListener('click', () => {
   setPasswordVisible($('admin-password').type === 'password');
 });
 function showLogin() {
+  managedUploadAccount = null;
+  document.body.classList.remove('managed-uploads');
+  $('workspace-title').textContent = 'Documents & assistant';
   savedProcessor.reset();
   if (originalPdfDialog.open) originalPdfDialog.close();
   adminPanel.reset();
+  superPanel.reset();
+  selectWorkspaceAccount();
+  selectedWorkspaceAccount = null;
+  $('super-workspace-scope').textContent = '';
   guide.reset();
   state.user = null;
   cancelWorkspaceRequests();
@@ -775,6 +874,7 @@ function showLogin() {
   state.histories = {}; state.results = {};
   $('admin-app').hidden = true; $('admin-app').inert = true;
   $('login-gate').hidden = false;
+  clearMfa();
   $('admin-password').value = '';
   $('confirm-password').value = '';
   setPasswordVisible(false);
@@ -802,24 +902,112 @@ document.addEventListener('keydown', event => {
   }
 });
 let signupMode = false;
+function clearMfa() {
+  $('mfa-form').hidden = true;
+  $('login-form').hidden = false;
+  $('mfa-key').value = '';
+  $('mfa-qr').hidden = true;
+  $('mfa-qr').removeAttribute('src');
+  $('mfa-code').value = '';
+  $('mfa-error').hidden = true;
+}
+
+function showMfa(data) {
+  const setup = data.mfa_required === 'setup';
+  const qr = $('mfa-qr');
+  const hasQr = setup && Boolean(data.setup_qr_png);
+  qr.hidden = !hasQr;
+  if (hasQr) qr.src = 'data:image/png;base64,' + data.setup_qr_png;
+  else qr.removeAttribute('src');
+  $('login-form').hidden = true;
+  $('mfa-form').hidden = false;
+  $('mfa-setup').hidden = !setup;
+  $('mfa-title').textContent = setup ? 'Set up two-factor authentication' : 'Verify your sign-in';
+  $('mfa-description').textContent = setup
+    ? (hasQr
+      ? 'Scan the QR code with your authenticator app, or enter the setup key manually. Then enter the six-digit code it generates.'
+      : 'Add a time-based account in your authenticator app using this setup key. Then enter the code it generates.')
+    : 'Enter the current six-digit code from your authenticator app.';
+  $('mfa-key').value = data.setup_key || '';
+  $('mfa-submit').textContent = setup ? 'Confirm setup' : 'Verify code';
+  $('admin-password').value = '';
+  $('confirm-password').value = '';
+  $('mfa-title').focus();
+}
+
+$('mfa-copy').addEventListener('click', async () => {
+  const key = $('mfa-key');
+  key.select();
+  try { await navigator.clipboard.writeText(key.value); }
+  catch { key.focus(); }
+});
+$('mfa-back').addEventListener('click', async () => {
+  const generation = state.generation;
+  $('mfa-back').disabled = true;
+  $('mfa-submit').disabled = true;
+  try { await json('/auth/mfa/cancel', {}); }
+  catch (error) {
+    if (generation === state.generation) {
+      $('mfa-error').textContent = error.message;
+      $('mfa-error').hidden = false;
+    }
+    return;
+  }
+  finally {
+    $('mfa-back').disabled = false;
+    $('mfa-submit').disabled = false;
+  }
+  if (generation === state.generation) {
+    clearMfa();
+    authMode(false);
+    $('user-email').focus();
+  }
+});
+$('mfa-form').addEventListener('submit', async event => {
+  event.preventDefault();
+  const generation = state.generation;
+  $('mfa-submit').disabled = true;
+  $('mfa-back').disabled = true;
+  $('mfa-error').hidden = true;
+  try {
+    await json('/auth/mfa/verify', { code: $('mfa-code').value });
+    if (generation !== state.generation) return;
+    clearMfa();
+    authChanges?.postMessage('session-changed');
+    window.location.replace('index.html');
+  } catch (error) {
+    if (generation !== state.generation) return;
+    $('mfa-error').textContent = error.message;
+    $('mfa-error').hidden = false;
+    $('mfa-code').select();
+  } finally {
+    $('mfa-submit').disabled = false;
+    $('mfa-back').disabled = false;
+  }
+});
+
 function authMode(signup) {
   signupMode = signup;
+  const accepting = Boolean(inviteToken);
+  $('user-email').hidden = accepting;
+  $('user-email').disabled = accepting;
+  $('login-identity-label').hidden = accepting;
   $('user-email').type = signup ? 'email' : 'text';
   $('user-email').maxLength = 254;
   $('user-email').value = '';
   $('login-identity-label').textContent = signup ? 'EMAIL' : 'EMAIL OR USERNAME';
 
-  $('auth-title').textContent = signup ? 'Create your account' : 'Welcome back';
-  $('auth-description').textContent = signup ? 'Sign up to start asking questions about your documents.' : 'Sign in to access your knowledge bases and documents.';
+  $('auth-title').textContent = accepting ? 'Accept your invitation' : signup ? 'Create your account' : 'Welcome back';
+  $('auth-description').textContent = accepting ? 'Choose a password to activate your Query Assistant sign-in.' : signup ? 'Sign up to start asking questions about your documents.' : 'Sign in to access your knowledge bases and documents.';
   $('signup-name-field').hidden = !signup;
-  $('confirm-password-field').hidden = !signup;
-  for (const id of ['user-name', 'confirm-password']) {
-    $(id).disabled = !signup; $(id).required = signup;
-  }
-  $('admin-password').minLength = signup ? 8 : 1;
-  $('admin-password').autocomplete = signup ? 'new-password' : 'current-password';
-  $('login-submit').textContent = signup ? 'Create account' : 'Sign in';
-  $('auth-switch').textContent = signup ? 'Already have an account? Sign in' : 'New here? Create an account';
+  $('confirm-password-field').hidden = !(signup || accepting);
+  $('user-name').disabled = !signup; $('user-name').required = signup;
+  $('confirm-password').disabled = !(signup || accepting);
+  $('confirm-password').required = signup || accepting;
+  $('admin-password').minLength = signup || accepting ? 8 : 1;
+  $('admin-password').autocomplete = signup || accepting ? 'new-password' : 'current-password';
+  $('login-submit').textContent = accepting ? 'Set password and sign in' : signup ? 'Create account' : 'Sign in';
+  $('auth-switch').textContent = accepting ? 'Return to sign in' : signup ? 'Already have an account? Sign in' : 'New here? Create an account';
   $('login-error').hidden = true; $('auth-message').hidden = true;
   $('admin-password').value = ''; $('confirm-password').value = '';
   $('confirm-password').setCustomValidity('');
@@ -829,7 +1017,10 @@ function authMode(signup) {
   $('toggle-confirm-password').setAttribute('aria-label', 'Show confirm password');
   setPasswordVisible(false);
 }
-$('auth-switch').addEventListener('click', () => authMode(!signupMode));
+$('auth-switch').addEventListener('click', () => {
+  if (inviteToken) { inviteToken = ''; authMode(false); void resumeSession(); }
+  else authMode(!signupMode);
+});
 $('toggle-confirm-password').addEventListener('click', () => {
   const visible = $('confirm-password').type === 'password';
   $('confirm-password').type = visible ? 'text' : 'password';
@@ -844,18 +1035,21 @@ async function openWorkspace(user) {
   showLogin();
   state.user = user;
   $('account-name').textContent = user.name || user.email;
+  if (user.role === 'super_admin') $('super-workspace-scope').textContent = 'Viewing your Super Admin workspace';
   $('admin-password').value = ''; $('confirm-password').value = '';
   setPasswordVisible(false);
-  $('session-loading').hidden = true;
   $('login-gate').hidden = true;
-  $('admin-app').hidden = false; $('admin-app').inert = false;
   await connect();
-  if (state.user === user) await adminPanel.start();
+  if (state.user !== user) return;
+  await adminPanel.start(() => {
+    $('admin-app').hidden = false; $('admin-app').inert = false;
+    $('session-loading').hidden = true;
+  });
 }
 $('login-form').addEventListener('submit', async event => {
   event.preventDefault();
   const generation = state.generation;
-  if (signupMode && $('admin-password').value !== $('confirm-password').value) {
+  if ((signupMode || inviteToken) && $('admin-password').value !== $('confirm-password').value) {
     $('confirm-password').setCustomValidity('Passwords do not match.');
     $('confirm-password').reportValidity(); return;
   }
@@ -864,13 +1058,18 @@ $('login-form').addEventListener('submit', async event => {
   try {
     const body = { [signupMode ? 'email' : 'identity']: $('user-email').value.trim(), password: $('admin-password').value };
     if (signupMode) body.name = $('user-name').value.trim();
-    const data = await json(signupMode ? '/auth/signup' : '/auth/login', body);
+    const data = inviteToken
+      ? await json('/auth/accept-invite', { token_hash: inviteToken, password: body.password })
+      : await json(signupMode ? '/auth/signup' : '/auth/login', body);
     if (generation !== state.generation) return;
     if (data.confirmation_required) {
       const email = body.email;
       authMode(false);
       $('user-email').value = email;
       $('auth-message').textContent = data.message; $('auth-message').hidden = false;
+    } else if (data.mfa_required) {
+      inviteToken = '';
+      showMfa(data);
     } else {
       authChanges?.postMessage('session-changed');
       window.location.replace('index.html');
@@ -883,6 +1082,7 @@ renderMessages();
 async function resumeSession() {
   // Cookies persist safely across reloads. A 401 triggers one refresh and retry.
   showLogin();
+  if (inviteToken) { authMode(false); $('session-loading').hidden = true; return; }
   const generation = state.generation;
   $('login-gate').hidden = true; $('session-loading').hidden = false;
   $('login-submit').disabled = true;

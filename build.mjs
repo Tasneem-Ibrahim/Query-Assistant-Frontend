@@ -13,7 +13,7 @@ if (backendUrl) {
 }
 await mkdir(output, { recursive: true });
 await writeFile(new URL('config.js', output), `export const backendUrl = ${JSON.stringify(backendUrl)};\n`);
-for (const name of ['index.html', 'styles.css', 'dashboard.css', 'app.js', 'api.js', 'voice.js', 'onboarding.js', 'admin-panel.js', 'saved-processing.js']) {
+for (const name of ['index.html', 'styles.css', 'dashboard.css', 'app.js', 'api.js', 'voice.js', 'onboarding.js', 'admin-panel.js', 'super-admin.js', 'saved-processing.js']) {
   await copyFile(new URL(name, import.meta.url), new URL(name, output));
 }
 await cp(new URL('./assets/', import.meta.url), new URL('assets/', output), {

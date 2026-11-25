@@ -10,7 +10,7 @@
   <link rel="stylesheet" href="dashboard.css">
 </head>
 <body class="landing-page">
-  <div id="session-loading" class="session-loading" role="status">Loading your workspace…</div>
+  <div id="session-loading" class="session-loading" role="status">Loading Query Assistant…</div>
   <div id="login-gate" class="login-gate" hidden>
     <form id="login-form" class="login-card">
       <img src="assets/query-assistant-logo.svg" alt="" width="56" height="56">
@@ -42,6 +42,22 @@
       <button id="auth-switch" class="text-link" type="button">New here? Create an account</button>
       <p class="auth-session-note">Your session lasts up to 7 days. Access renews every 15 minutes.</p>
     </form>
+    <form id="mfa-form" class="login-card" hidden>
+      <img src="assets/query-assistant-logo.svg" alt="" width="56" height="56">
+      <h1 id="mfa-title" tabindex="-1">Verify your sign-in</h1>
+      <p id="mfa-description"></p>
+      <div id="mfa-setup" class="mfa-setup" hidden>
+        <img id="mfa-qr" width="220" height="220" alt="Scan this QR code in your authenticator app" hidden>
+        <label for="mfa-key">Authenticator setup key</label>
+        <input id="mfa-key" type="text" readonly spellcheck="false" autocomplete="off">
+        <button id="mfa-copy" class="text-link" type="button">Copy setup key</button>
+      </div>
+      <label for="mfa-code">6-digit code</label>
+      <input id="mfa-code" type="text" inputmode="numeric" autocomplete="one-time-code" pattern="[0-9]{6}" maxlength="6" required>
+      <p id="mfa-error" role="alert" hidden></p>
+      <button id="mfa-submit" class="button primary full" type="submit">Verify code</button>
+      <button id="mfa-back" class="text-link" type="button">Return to sign in</button>
+    </form>
   </div>
   <div id="admin-app" hidden inert>
   <aside id="admin-sidebar" class="admin-sidebar" hidden aria-label="Admin navigation">
@@ -50,8 +66,15 @@
     <button type="button" data-admin-page="dashboard">Dashboard</button>
     <button type="button" data-admin-page="knowledge-bases">Knowledge Bases</button>
     <div class="sidebar-group">User management</div>
+    <button type="button" data-super-page="workspace" hidden>Workspace</button>
+    <button type="button" data-super-page="roles" hidden>Role Management</button>
     <button type="button" data-admin-page="users">All users</button>
     <button type="button" data-admin-page="requests">Upload requests <span id="admin-pending" class="count">0</span></button>
+    <div class="sidebar-group" id="super-settings-label" hidden>Settings</div>
+    <button type="button" data-super-page="permission-list" hidden>Permissions List</button>
+    <button type="button" data-super-page="permissions" hidden>Permission Matrix</button>
+    <button type="button" data-super-page="login-logs" hidden>Logs Management</button>
+    <button type="button" data-super-page="revisions" hidden>Revision</button>
   </aside>
   <header class="nav shell">
     <div class="dashboard-heading"><h1 id="dashboard-page-title">Dashboard</h1></div>
@@ -72,14 +95,15 @@
   <main>
     <section id="knowledge-bases" class="shell" hidden aria-labelledby="knowledge-bases-title">
       <h1 id="knowledge-bases-title" tabindex="-1">Knowledge Bases</h1>
-      <p>Browse your knowledge bases and their documents.</p>
+      <p id="knowledge-bases-description">Browse your knowledge bases and their documents.</p>
       <div id="knowledge-base-list"></div>
     </section>
     <section id="admin-overview" class="shell admin-overview" hidden aria-label="Dashboard overview">
-      <div><div class="eyebrow">ADMIN WORKSPACE</div><h1>Dashboard</h1><p>Your knowledge, with room to focus.</p></div>
       <div class="admin-stats"><article class="panel"><span>Total users</span><strong id="admin-total-users">—</strong><small>Registered accounts</small></article><article class="panel"><span>Pending requests</span><strong id="admin-total-pending">—</strong><small>Awaiting your review</small></article></div>
     </section>
     <div id="admin-sync" class="shell admin-sync" hidden><button id="admin-refresh" class="button secondary" type="button">Refresh permissions</button><span id="admin-sync-status" role="status"></span></div>
+    <section id="super-workspace-scope" class="shell super-workspace-scope" aria-live="polite" hidden></section>
+    <section id="super-admin-panel" class="shell panel super-admin-panel" hidden></section>
     <section id="admin-content" class="shell panel admin-content" hidden aria-label="User management"></section>
     <section class="hero shell" aria-labelledby="hero-title">
       <div class="hero-copy">
@@ -98,8 +122,8 @@
       </div>
     </section>
 
-    <section class="workspace shell" id="workspace" aria-labelledby="workspace-title">
-      <div class="section-heading"><div><div class="eyebrow">THE INTELLIGENCE WORKSPACE</div><h2 id="workspace-title">A little curiosity. A lot of clarity.</h2></div><span class="workspace-label"><span></span> Your document workspace</span><a class="button secondary assistant-shortcut" href="#document-assistant">Jump to assistant <span aria-hidden="true">&#8595;</span></a></div>
+    <section class="workspace shell" id="workspace" aria-labelledby="workspace-title" hidden>
+      <div class="section-heading"><h2 id="workspace-title">Documents &amp; assistant</h2><a class="button secondary assistant-shortcut" href="#document-assistant">Jump to assistant <span aria-hidden="true">&#8595;</span></a></div>
       <div class="workspace-grid">
         <aside class="knowledge panel">
           <div class="panel-title"><h3>Knowledge base</h3><span class="subtle-icon">▤</span></div>
