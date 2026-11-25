@@ -68,6 +68,8 @@ export function createAdminPanel({ api, user, onError, sendUpload, onReady = () 
     $('user-upload-status').hidden = true; $('workspace').hidden = true;
     $('admin-content').replaceChildren(); $('user-upload-status').replaceChildren();
     $('knowledge-bases').hidden = true; $('knowledge-bases-link').hidden = true;
+    $('profile-workspace').hidden = true; $('profile-knowledge-bases').hidden = true;
+    $('admin-menu').open = false;
     $('knowledge-base-list').replaceChildren();
     $('admin-bell').hidden = true; $('admin-menu-toggle').hidden = true; $('admin-sync-status').textContent = '';
     $('admin-dashboard-entry').hidden = true; $('admin-sync').hidden = true;
@@ -616,6 +618,10 @@ export function createAdminPanel({ api, user, onError, sendUpload, onReady = () 
     $('admin-dashboard-entry').textContent = 'Dashboard';
     $('admin-dashboard-entry').href = isAdmin ? 'dashboard.html' : 'workspace.html';
     $('admin-dashboard-entry').hidden = !landing;
+    const regularUser = user()?.role === 'user';
+    $('admin-refresh').hidden = regularUser;
+    $('profile-workspace').hidden = !regularUser;
+    $('profile-knowledge-bases').hidden = !regularUser || !can('bases.view');
     onRouteReady();
     if (page === 'knowledge-bases') $('knowledge-bases-title').focus({ preventScroll: true });
     await refresh(); if (version === generation) timer = setInterval(() => refresh(true), 30000);
@@ -627,6 +633,14 @@ export function createAdminPanel({ api, user, onError, sendUpload, onReady = () 
     navigate(page === 'knowledge-bases' ? 'workspace' : 'knowledge-bases');
   });
   $('admin-bell').addEventListener('click', () => navigate('requests'));
+  for (const destination of workspacePages) {
+    $(`profile-${destination}`).addEventListener('click', () => {
+      const menu = $('admin-menu');
+      menu.open = false;
+      menu.querySelector('summary').focus();
+      navigate(destination);
+    });
+  }
   $('admin-menu-toggle').addEventListener('click', () => {
     if ($('admin-sidebar').classList.contains('is-open')) { closeNavigation(true); return; }
     $('admin-sidebar').classList.add('is-open'); backdrop.hidden = false; $('admin-menu-toggle').setAttribute('aria-expanded', 'true');
