@@ -104,6 +104,7 @@ const adminPanel = createAdminPanel({ user: () => state.user, onError: message =
   onReady: rows => refreshApprovedDocuments(rows).catch(error => notice(error.message)),
   onApprovedUploads: rows => savedProcessor.enqueue(rows),
   onViewPdf: row => viewOriginalPdf(row),
+  onViewDocument: (hash, filename) => openPdf(hash, filename),
   knowledgeBases: () => state.domains,
   workspaceAccount: () => selectedWorkspaceAccount,
   onPage: page => superPanel.show(page),

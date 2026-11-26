@@ -1,5 +1,5 @@
 // Account-scoped administration UI. All authorization remains on the backend.
-export function createAdminPanel({ api, user, onError, sendUpload, onReady = () => {}, onApprovedUploads = () => {}, onViewPdf, confirmRemoveCard, knowledgeBases, workspaceAccount, onOpenBase, onManageUploads, managingUploads, addApprovalRequest, confirmApprovalDelete, onPage = () => {} }) {
+export function createAdminPanel({ api, user, onError, sendUpload, onReady = () => {}, onApprovedUploads = () => {}, onViewPdf, onViewDocument, confirmRemoveCard, knowledgeBases, workspaceAccount, onOpenBase, onManageUploads, managingUploads, addApprovalRequest, confirmApprovalDelete, onPage = () => {} }) {
   const isAdminAccount = () => ['admin', 'super_admin'].includes(user()?.role);
   const isSuper = () => user()?.role === 'super_admin';
   const can = key => user()?.role === 'user' && /^(accounts|approvals)\./.test(key)
@@ -275,7 +275,15 @@ export function createAdminPanel({ api, user, onError, sendUpload, onReady = () 
         const row = el('div', '', 'knowledge-base-pdf');
         const badge = { Ready: 'approved', 'Awaiting approval': 'pending', Failed: 'rejected' }[file.status] || 'processing-status';
         row.append(el('strong', file.filename), el('span', file.status, `approval-badge ${badge}`));
-        if (file.status === 'Ready') row.append(button('View PDF', () => onViewPdf({ domain: domain.key, file_hash: hash, filename: file.filename })));
+        if (file.status === 'Ready') row.append(button('View Document', async () => {
+          if (!can('documents.view') || !canVisit('workspace')) return;
+          const version = generation;
+          const opened = await onOpenBase(domain.key);
+          if (!opened || version !== generation || !row.isConnected || page !== 'knowledge-bases'
+              || !can('documents.view') || !canVisit('workspace')) return;
+          navigate('workspace');
+          onViewDocument(hash, file.filename);
+        }));
         rows.append(row);
       }
       list.replaceChildren(rows);
