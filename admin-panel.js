@@ -4,8 +4,9 @@ export function createAdminPanel({ api, user, onError, sendUpload, onReady = () 
   const isSuper = () => user()?.role === 'super_admin';
   const can = key => user()?.role === 'user' && /^(accounts|approvals)\./.test(key)
     ? user()?.permissions?.[key] === true : user()?.permissions?.[key] !== false;
-  const hasManagement = () => isAdminAccount() || (user() && (can('accounts.view') || can('approvals.view')));
-  const pagePermissions = { 'knowledge-bases': 'bases.view', users: 'accounts.view', requests: 'approvals.view' };
+  const hasManagement = () => isAdminAccount() || (user() && (can('accounts.view') || can('approvals.view')
+    || Object.keys(superPermissions).some(showSuperPage)));
+  const pagePermissions = { 'user-details-add': 'accounts.add', workspace: 'bases.view', 'knowledge-bases': 'bases.view', users: 'accounts.view', requests: 'approvals.view' };
   const $ = id => document.getElementById(id);
   const el = (tag, text, cls = '') => { const n = document.createElement(tag); n.textContent = text; n.className = cls; return n; };
   let generation = 0, timer, people = [], requests = [], selected = null, tab = 'overview', page = 'dashboard', filter = 'pending', busy = false;
@@ -25,12 +26,34 @@ export function createAdminPanel({ api, user, onError, sendUpload, onReady = () 
     $('dashboard-page-title').textContent = 'Workspace';
     $('workspace-title').textContent = 'Documents & assistant';
   }
-  const pages = ['users', 'requests', 'knowledge-bases'];
-  const superPages = ['roles', 'permission-list', 'permissions', 'login-logs', 'revisions', 'workspace'];
-  const workspacePages = ['workspace', 'knowledge-bases'];
+  const pages = ['users', 'requests', 'knowledge-bases', 'documents', 'user-details-add'];
+  const superPages = ['roles', 'permission-list', 'permissions', 'user-uploads', 'login-logs', 'revisions', 'workspace'];
+  const superPermissions = { roles: 'roles.view', 'user-uploads': 'user_uploads.view', 'permission-list': 'permissions.view', permissions: 'permissions.view',
+    'login-logs': 'logs.view', revisions: 'revisions.view' };
+  const canAddUser = () => isSuper() || (user()?.permissions?.['accounts.view'] === true
+    && user()?.permissions?.['accounts.add'] === true && user()?.account_scope?.includes('role:user'));
+  const showSuperPage = page => isSuper() || (Object.hasOwn(superPermissions, page)
+    && user()?.permissions?.[superPermissions[page]] === true);
+  const scoped = person => isSuper() || (person.id !== user()?.id && (
+    user()?.account_scope?.includes(person.id) || user()?.account_scope?.includes('role:' + (person.role || 'user'))));
+  const workspacePages = ['workspace', 'knowledge-bases', 'documents'];
+  const canVisit = destination => {
+    if (destination === 'user-details-add') return canAddUser();
+    const regular = user()?.role === 'user';
+    if (destination === 'documents') return regular && canVisit('workspace') && user()?.permissions?.['documents.view'] === true;
+    if (destination === 'dashboard') return !regular;
+    if (superPages.includes(destination) && destination !== 'workspace') return showSuperPage(destination);
+    const permission = pagePermissions[destination];
+    if (!permission) return destination === 'home';
+    return regular && user()?.permissions ? user().permissions[permission] === true : can(permission);
+  };
+  const defaultRoute = () => user()?.role === 'user'
+    ? (['workspace', 'users', 'requests', ...Object.keys(superPermissions)].find(canVisit) || 'home') : 'dashboard';
+
   let activeRoute;
   const paths = { home: 'm3 10 9-7 9 7v10a1 1 0 0 1-1 1h-5v-7H9v7H4a1 1 0 0 1-1-1Z',
     dashboard: 'M3 3h7v7H3z M14 3h7v7h-7z M3 14h7v7H3z M14 14h7v7h-7z',
+    documents: 'M6 3h8l4 4v14H6z M14 3v5h4 M9 13h6 M9 17h6',
     'knowledge-bases': 'M3 6a2 2 0 0 1 2-2h5l2 2h7a2 2 0 0 1 2 2v10a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2Z M7 11h10 M7 15h7',
     users: 'M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2 M9 3a4 4 0 1 0 0 8 4 4 0 0 0 0-8 M20 21v-2a4 4 0 0 0-3-3.87 M16 3.13a4 4 0 0 1 0 7.75',
     requests: 'M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8Z M14 2v6h6 M8 15l3 3 5-5',
@@ -38,6 +61,7 @@ export function createAdminPanel({ api, user, onError, sendUpload, onReady = () 
     roles: 'M12 22s7-3 7-10V5l-7-3-7 3v7c0 7 7 10 7 10Z M9 12l2 2 4-4',
     'permission-list': 'M9 6h11 M9 12h11 M9 18h11 M4 6h.01 M4 12h.01 M4 18h.01',
     permissions: 'M3 4h18v16H3z M3 9h18 M9 9v11 M15 9v11 M3 14h18',
+    'user-uploads': 'M12 16V3 M7 8l5-5 5 5 M4 16v5h16v-5',
     'login-logs': 'M5 4h10l4 4v12H5z M15 4v5h4 M8 12h8 M8 16h8',
     revisions: 'M3 12a9 9 0 1 1 2.6 6.4 M3 6v6h6 M12 7v5l3 2' };
   document.querySelectorAll('[data-admin-page], [data-super-page]').forEach(n => {
@@ -68,7 +92,6 @@ export function createAdminPanel({ api, user, onError, sendUpload, onReady = () 
     $('user-upload-status').hidden = true; $('workspace').hidden = true;
     $('admin-content').replaceChildren(); $('user-upload-status').replaceChildren();
     $('knowledge-bases').hidden = true; $('knowledge-bases-link').hidden = true;
-    $('profile-workspace').hidden = true; $('profile-knowledge-bases').hidden = true;
     $('admin-menu').open = false;
     $('knowledge-base-list').replaceChildren();
     $('admin-bell').hidden = true; $('admin-menu-toggle').hidden = true; $('admin-sync-status').textContent = '';
@@ -122,21 +145,21 @@ export function createAdminPanel({ api, user, onError, sendUpload, onReady = () 
     finally { if (version === generation) busy = false; }
   }
   function navigate(next, { message: knowledgeBaseMessage, historyMode = 'push' } = {}) {
-    if ((managingUploads() && next !== 'workspace') || (workspaceAccount() && !workspacePages.includes(next))) {
+    if (workspaceAccount() && !workspacePages.includes(next)) {
       void onManageUploads(null, $('admin-sync-status'), next, historyMode);
       return;
     }
-    if (pagePermissions[next] && !can(pagePermissions[next])) next = isAdminAccount() ? 'dashboard' : 'workspace';
+    if (!canVisit(next)) { next = defaultRoute(); historyMode = 'replace'; }
     if (next === 'home' && !landing) { location.assign('index.html'); return; }
     if (next === 'workspace' && landing) { location.assign('workspace.html'); return; }
     if (next !== 'home' && landing) { location.assign(`dashboard.html${next === 'dashboard' ? '' : '#' + next}`); return; }
     page = next; selected = null; tab = 'overview';
     const browsing = next === 'knowledge-bases';
-    const isAdmin = hasManagement();
+    const sidebar = Boolean(user());
     if (!landing) {
       const path = ['workspace', 'dashboard'].includes(next)
         ? new URL(next + '.html', location.href).pathname : location.pathname;
-      const hash = next !== 'workspace' && [...pages, ...(isSuper() ? superPages : [])].includes(next) ? '#' + next : '';
+      const hash = next !== 'workspace' && [...pages, ...superPages.filter(showSuperPage)].includes(next) ? '#' + next : '';
       const account = workspacePages.includes(next) ? workspaceAccount() : null;
       const previous = activeRoute;
       const changed = previous?.page !== next || previous?.account?.id !== account?.id;
@@ -147,31 +170,33 @@ export function createAdminPanel({ api, user, onError, sendUpload, onReady = () 
         history[push ? 'pushState' : 'replaceState']({ queryAssistantRoute: activeRoute }, '', path + location.search + hash);
       }
     }
-    $('dashboard-page-title').textContent = ({ dashboard: 'Dashboard', users: 'Users', requests: 'Upload requests', 'knowledge-bases': 'Knowledge Bases', roles: 'Role Management', 'permission-list': 'Permissions List', permissions: 'Permission Matrix', 'login-logs': 'Logs Management', revisions: 'Revision' })[next] || 'Workspace';
+    $('dashboard-page-title').textContent = ({ dashboard: 'Dashboard', documents: 'PDFs and Images', users: 'Users', 'user-details-add': 'Add User', requests: 'Upload requests', 'knowledge-bases': 'Knowledge Bases', roles: 'Role Management', 'permission-list': 'Permissions List', permissions: 'Permission Matrix', 'login-logs': 'Logs Management', 'user-uploads': 'User Uploads', revisions: 'Revision' })[next] || 'Workspace';
     const home = next === 'home';
-    document.body.classList.toggle('admin-layout', isAdmin && !home);
-    $('admin-sidebar').hidden = !isAdmin || home; $('admin-menu-toggle').hidden = !isAdmin || home;
+    document.body.classList.toggle('admin-layout', sidebar && !home);
+    $('admin-sidebar').hidden = !sidebar || home; $('admin-menu-toggle').hidden = !sidebar || home;
+    $('sidebar-role-label').textContent = user()?.role === 'user' ? 'User workspace' : 'Admin workspace';
     $('admin-dashboard-entry').hidden = !home; $('admin-sync').hidden = home || browsing;
-    $('admin-bell').hidden = !isAdmin || home || !can('approvals.view');
-    $('workspace').hidden = next !== 'workspace' && (next !== 'dashboard' || isSuper());
+    $('admin-bell').hidden = !sidebar || home || !canVisit('requests');
+    $('workspace').hidden = !canVisit('workspace') || (!['workspace', 'documents'].includes(next) && (next !== 'dashboard' || isSuper()));
     $('super-workspace-scope').hidden = !(isSuper() || managingUploads())
       || next !== 'workspace' || !$('super-workspace-scope').textContent;
     document.querySelectorAll('[data-super-page]').forEach(button => {
-      button.hidden = !isSuper();
+      button.hidden = !canVisit(button.dataset.superPage)
+        || (button.dataset.superPage === 'workspace' && !isSuper() && user()?.role !== 'user');
       button.setAttribute('aria-current', button.dataset.superPage === next ? 'page' : 'false');
     });
-    $('super-settings-label').hidden = !isSuper();
+    $('super-settings-label').hidden = !['permission-list', 'permissions', 'login-logs', 'revisions'].some(canVisit);
+    $('user-management-label').hidden = !['users', 'requests', 'roles', 'user-uploads'].some(canVisit);
     onPage(next);
     $('admin-overview').hidden = next !== 'dashboard' || user()?.role !== 'admin';
     $('admin-content').hidden = !['users', 'requests'].includes(next);
     $('knowledge-bases').hidden = !browsing;
     const browseLink = $('knowledge-bases-link');
-    browseLink.hidden = isAdmin || landing || !can('bases.view');
+    browseLink.hidden = hasManagement() || landing || !canVisit('knowledge-bases');
     browseLink.href = browsing ? 'workspace.html' : '#knowledge-bases';
     browseLink.textContent = browsing ? 'Workspace' : 'Knowledge Bases';
     document.querySelectorAll('[data-admin-page]').forEach(n => {
-      const permission = pagePermissions[n.dataset.adminPage];
-      n.hidden = Boolean(permission && !can(permission));
+      n.hidden = !canVisit(n.dataset.adminPage);
       n.setAttribute('aria-current', n.dataset.adminPage === next ? 'page' : 'false');
     });
     closeNavigation();
@@ -180,16 +205,15 @@ export function createAdminPanel({ api, user, onError, sendUpload, onReady = () 
       $('knowledge-bases-title').focus({ preventScroll: true });
     }
     if (['users', 'requests'].includes(next)) render();
-    window.scrollTo({ top: 0, behavior: 'instant' });
+    if (next === 'documents') $('documents').scrollIntoView({ block: 'nearest' });
+    else window.scrollTo({ top: 0, behavior: 'instant' });
   }
   async function restoreRoute(route, fallback, historyMode) {
     const previous = activeRoute;
-    const allowedPages = isSuper() ? ['dashboard', ...pages, ...superPages]
-      : hasManagement() ? ['dashboard', 'workspace', ...pages] : workspacePages;
-    const validRoute = route?.owner === user()?.id && allowedPages.includes(route?.page);
+    const validRoute = route?.owner === user()?.id && canVisit(route?.page);
     const next = validRoute ? route.page : fallback;
     const account = validRoute && workspacePages.includes(next)
-      && (isSuper() || (isAdminAccount() && next === 'workspace')) ? route.account : null;
+      && (isSuper() || user()?.permissions?.['user_uploads.view'] === true) ? route.account : null;
     if (workspaceAccount()?.id !== account?.id) {
       const switched = await onManageUploads(account, $('admin-sync-status'), next, historyMode);
       if (switched === false && historyMode === 'restore' && previous && route.position !== previous.position) {
@@ -204,7 +228,6 @@ export function createAdminPanel({ api, user, onError, sendUpload, onReady = () 
     if (!landing && user() && route?.owner === user().id) void restoreRoute(route, 'workspace', 'restore');
   });
   async function loadBaseDocuments(domain, details, list, count, requestsForView) {
-    list.replaceChildren(el('p', 'Loading documents…'));
     try {
       const [status, uploadRequests] = await Promise.all([
         api(`/domains/${encodeURIComponent(domain.key)}/status`), requestsForView,
@@ -226,15 +249,17 @@ export function createAdminPanel({ api, user, onError, sendUpload, onReady = () 
       }
       const pdfs = [...files].filter(([, file]) => /\.pdf$/i.test(file.filename));
       count.textContent = `${pdfs.length} ${pdfs.length === 1 ? 'PDF' : 'PDFs'}`;
-      list.replaceChildren();
-      if (!pdfs.length) list.append(el('p', 'No PDFs in this knowledge base.'));
+      const rows = document.createDocumentFragment();
+      if (!pdfs.length) rows.append(el('p', 'No PDFs in this knowledge base.'));
       for (const [hash, file] of pdfs) {
         const row = el('div', '', 'knowledge-base-pdf');
         const badge = { Ready: 'approved', 'Awaiting approval': 'pending', Failed: 'rejected' }[file.status] || 'processing-status';
         row.append(el('strong', file.filename), el('span', file.status, `approval-badge ${badge}`));
         if (file.status === 'Ready') row.append(button('View PDF', () => onViewPdf({ domain: domain.key, file_hash: hash, filename: file.filename })));
-        list.append(row);
+        rows.append(row);
       }
+      list.replaceChildren(rows);
+      return true;
     } catch {
       if (details.isConnected && page === 'knowledge-bases') list.replaceChildren(el('p', 'Could not load PDFs. Close and reopen this knowledge base to retry.'));
     }
@@ -243,7 +268,7 @@ export function createAdminPanel({ api, user, onError, sendUpload, onReady = () 
     if (page !== 'knowledge-bases') return;
     const root = $('knowledge-base-list');
     const domains = knowledgeBases();
-    const account = isSuper() ? workspaceAccount() : null;
+    const account = workspaceAccount();
     const loadCards = [];
     $('knowledge-bases-description').textContent = account
       ? `Knowledge bases and documents for ${account.name || account.email}`
@@ -254,8 +279,8 @@ export function createAdminPanel({ api, user, onError, sendUpload, onReady = () 
       return;
     }
     if (!domains.length) root.append(el('p', account ? 'This account has no knowledge bases.' : 'No knowledge bases to show. Create one in Workspace.'));
-    const requestsForView = account && domains.length
-      ? api('/upload-requests').then(data => data.requests || []).catch(() => [])
+    const requestsForView = can('documents.view') && domains.length && (account || !isAdminAccount())
+      ? api('/upload-requests').then(data => data.requests || []).catch(() => account ? [] : own.requests)
       : null;
     for (const domain of domains) {
       const card = el('article', '', 'panel knowledge-base-card');
@@ -268,21 +293,30 @@ export function createAdminPanel({ api, user, onError, sendUpload, onReady = () 
       const top = el('span', '', 'knowledge-base-card-top');
       top.append(icon, count);
       const title = el('strong', domain.label, 'knowledge-base-name');
-      const browse = el('span', 'View documents', 'knowledge-base-browse');
+      const browse = el('span', can('documents.view') ? 'View documents' : 'Documents unavailable', 'knowledge-base-browse');
       const arrow = el('span', '›');
       arrow.setAttribute('aria-hidden', 'true');
       browse.append(arrow);
       summary.append(top, title, browse);
       const list = el('div', '', 'knowledge-base-pdfs');
       list.setAttribute('aria-live', 'polite');
+      if (can('documents.view')) list.append(el('p', 'Loading documents...'));
       details.append(summary, list);
       let loading = false;
+      let loaded = false;
       const load = async () => {
-        if (loading || !card.isConnected || page !== 'knowledge-bases') return;
+        if (!can('documents.view') || loading || loaded || !card.isConnected || page !== 'knowledge-bases') return;
+        if (list.dataset.failed) list.replaceChildren(el('p', 'Loading documents...'));
         loading = true;
-        await loadBaseDocuments(domain, details, list, count, requestsForView);
-        loading = false;
-        count.hidden = !count.textContent;
+        list.setAttribute('aria-busy', 'true');
+        try {
+          loaded = await loadBaseDocuments(domain, details, list, count, requestsForView);
+          list.dataset.failed = loaded ? '' : 'true';
+          count.hidden = !count.textContent;
+        } finally {
+          loading = false;
+          list.removeAttribute('aria-busy');
+        }
       };
       loadCards.push(load);
       details.addEventListener('toggle', () => { if (details.open) void load(); });
@@ -330,7 +364,10 @@ export function createAdminPanel({ api, user, onError, sendUpload, onReady = () 
   }
   function requestCard(r, decisions) {
     const card = el('article', '', 'request-card');
-    if (!decisions && !isAdminAccount()) { card.classList.add('user-upload-card'); card.append(deleteCardButton(r)); }
+    if (!decisions && !isAdminAccount()) {
+      card.classList.add('user-upload-card');
+      if (can('documents.delete')) card.append(deleteCardButton(r));
+    }
     const person = people.find(p => p.id === r.user_id);
     const active = r.status === 'approved' && ['queued','processing','retrying'].includes(r.job_state);
     if (!decisions && !isAdminAccount() && r.status === 'approved') {
@@ -379,7 +416,7 @@ export function createAdminPanel({ api, user, onError, sendUpload, onReady = () 
     if (r.status === 'approved') card.append(el('p', r.file_ready ? 'Your upload is approved. No re-upload is needed.' : 'Approval granted. Select the original file once to save it for automatic processing.'));
     if (r.job_message && (r.status === 'expired' || ['ready','failed','retrying'].includes(r.job_state))) card.append(el('p', r.job_message));
     if (r.file_ready === false && r.status === 'pending') card.append(el('p', 'The saved file is not available yet. Select the file once to finish uploading.'));
-    if (decisions && can('approvals.edit') && r.status === 'pending' && (isAdminAccount() || r.user_id !== user()?.id)) {
+    if (decisions && can('approvals.edit') && r.status === 'pending' && (isSuper() || r.user_id !== user()?.id)) {
       const reason = document.createElement('textarea'); reason.placeholder = 'Reason (optional)'; reason.maxLength = 500;
       reason.setAttribute('aria-label', `Decision reason for ${r.filename}`);
       const actions = el('div', '', 'admin-actions');
@@ -465,7 +502,10 @@ export function createAdminPanel({ api, user, onError, sendUpload, onReady = () 
       if (!bases.length) panel.append(el('p', 'This user has no knowledge bases.'));
       for (const base of bases) {
         const card = el('article', '', 'activity-base');
-        card.append(el('h4', base.name), el('p', `${base.pdfs} ${base.pdfs === 1 ? 'PDF' : 'PDFs'} · ${base.images} ${base.images === 1 ? 'image' : 'images'}`));
+        const header = el('header', '', 'activity-base-header');
+        header.append(el('h4', base.name),
+          el('p', `${base.pdfs} ${base.pdfs === 1 ? 'PDF' : 'PDFs'} \u00b7 ${base.images} ${base.images === 1 ? 'image' : 'images'}`));
+        card.append(header);
         const approvals = activityTags(base.approvals, [
           ['approved', 'Approved', 'approved'], ['pending', 'Awaiting approval', 'pending'],
           ['rejected', 'Rejected', 'rejected'], ['expired', 'Expired', ''],
@@ -475,8 +515,14 @@ export function createAdminPanel({ api, user, onError, sendUpload, onReady = () 
           ['processing', 'Processing', 'processing-status'], ['retrying', 'Retrying', 'processing-status'],
           ['pending', 'Incomplete', 'pending'], ['failed', 'Failed', 'rejected'],
         ]);
-        if (approvals.childElementCount) card.append(el('span', 'Upload requests', 'activity-tag-label'), approvals);
-        if (processing.childElementCount) card.append(el('span', 'Document processing', 'activity-tag-label'), processing);
+        const groups = el('div', '', 'activity-status-groups');
+        for (const [label, tags] of [['Upload requests', approvals], ['Document processing', processing]]) {
+          if (!tags.childElementCount) continue;
+          const group = el('section', '', 'activity-status-group');
+          group.append(el('h5', label), tags);
+          groups.append(group);
+        }
+        if (groups.childElementCount) card.append(groups);
         panel.append(card);
       }
     } catch (error) {
@@ -489,15 +535,15 @@ export function createAdminPanel({ api, user, onError, sendUpload, onReady = () 
       const person = people.find(p => p.id === selected);
       if (!person) { selected = null; render(); return; }
       root.append(button('← All users', () => { selected = null; render(); }), el('h2', person.name || person.email));
-      if (user()?.role === 'admin' && user()?.permissions?.['user_uploads.view'] === true && can('bases.view')) {
+      if (scoped(person) && user()?.permissions?.['user_uploads.view'] === true && can('bases.view')) {
         root.append(button('Manage uploads', () => onManageUploads(person, $('admin-sync-status'))));
       }
       const tabs = el('div', '', 'admin-actions');
       const visibleTabs = ['overview'];
+      if (isSuper() || (scoped(person) && user()?.permissions?.['accounts.edit'] === true)) visibleTabs.push('permissions');
       if (can('approvals.view')) {
-        if (isAdminAccount()) visibleTabs.push('permissions');
         visibleTabs.push('upload requests');
-        if (isAdminAccount() && can('bases.view') && can('documents.view')) visibleTabs.push('activity');
+        if (can('bases.view') && can('documents.view')) visibleTabs.push('activity');
       }
       if (!visibleTabs.includes(tab)) tab = 'overview';
       for (const name of visibleTabs) {
@@ -516,13 +562,13 @@ export function createAdminPanel({ api, user, onError, sendUpload, onReady = () 
         root.append(el('p', 'Choose whether this user needs approval for each file. Approving one request does not change this policy.'));
         const label = el('label', 'Upload permission'); label.htmlFor = 'user-upload-policy';
         const select = document.createElement('select'); select.id = 'user-upload-policy';
-        for (const [value, text] of [['approval_required', 'Approval required'], ['allowed', 'Upload allowed'], ['blocked', 'Upload blocked']]) {
+        for (const [value, text] of [['approval_required', 'Approval required'], ...(isSuper() || user()?.permissions?.['user_uploads.add'] === true ? [['allowed', 'Upload allowed']] : []), ['blocked', 'Upload blocked']]) {
           const option = el('option', text); option.value = value; select.append(option);
         }
         select.value = person.policy;
-        select.disabled = !can('approvals.edit');
+        select.disabled = !isSuper() && user()?.permissions?.['accounts.edit'] !== true;
         root.append(label, select);
-        if (can('approvals.edit')) root.append(button('Save permission', () => change(`/admin/users/${person.id}/permissions`, { policy: select.value })));
+        if (!select.disabled) root.append(button('Save permission', () => change(`/admin/users/${person.id}/permissions`, { policy: select.value })));
       } else if (tab === 'activity') {
         const panel = el('section', '', 'user-activity');
         panel.setAttribute('aria-label', 'Knowledge base activity');
@@ -531,11 +577,12 @@ export function createAdminPanel({ api, user, onError, sendUpload, onReady = () 
         void renderActivity(person, panel);
       } else {
         const items = requests.filter(r => r.user_id === selected);
-        if (isSuper() || user()?.permissions?.['approvals.add'] === true) root.append(approvalForm(person));
+        if (scoped(person) && (isSuper() || user()?.permissions?.['approvals.add'] === true)) root.append(approvalForm(person));
         if (!items.length) root.append(el('p', 'No upload requests yet.'));
         items.forEach(r => root.append(requestCard(r, true)));
       }
     } else if (page === 'users') {
+      if (canAddUser()) root.append(button('Add User', () => navigate('user-details-add')));
       root.append(el('h2', 'Users'), el('p', 'View account details and manage uploads with your assigned permissions.'));
       const search = document.createElement('input'); search.type = 'search'; search.placeholder = 'Search by name or email'; search.setAttribute('aria-label', 'Search users');
       const list = el('div', '', 'admin-user-list');
@@ -582,7 +629,7 @@ export function createAdminPanel({ api, user, onError, sendUpload, onReady = () 
     own.requests.forEach(r => details.append(requestCard(r, false))); root.append(details);
   }
   async function prepare(file, domain, useLlm = true) {
-    if (isAdminAccount()) return true;
+    if (isSuper() || user()?.id === 'local-admin' || (isAdminAccount() && user()?.permissions?.['user_uploads.add'] === true)) return true;
     const version = generation;
     const data = new FormData(); data.append('domain',domain); data.append('file',file);
     data.append('message',message); data.append('use_llm',useLlm);
@@ -604,24 +651,16 @@ export function createAdminPanel({ api, user, onError, sendUpload, onReady = () 
   }
   async function start(onRouteReady) {
     const version = generation;
-    const isAdmin = hasManagement();
-    document.body.classList.toggle('admin-layout', isAdmin);
-    $('admin-sidebar').hidden = !isAdmin; $('admin-bell').hidden = !isAdmin; $('admin-menu-toggle').hidden = !isAdmin;
     const requestedPage = location.hash.slice(1);
-    if (isAdmin) {
-      const defaultPage = user()?.role === 'user' || location.pathname.endsWith('/workspace.html') ? 'workspace' : 'dashboard';
-      const allowedPages = [...pages, ...(isSuper() ? superPages : [])];
-      await restoreRoute(history.state?.queryAssistantRoute, landing ? 'home' : allowedPages.includes(requestedPage) ? requestedPage : defaultPage, 'replace');
-    }
-    else if (!landing) await restoreRoute(history.state?.queryAssistantRoute, requestedPage === 'knowledge-bases' ? requestedPage : 'workspace', 'replace');
+    const fallback = landing ? 'home' : canVisit(requestedPage) ? requestedPage
+      : location.pathname.endsWith('/workspace.html') && canVisit('workspace') ? 'workspace' : defaultRoute();
+    await restoreRoute(history.state?.queryAssistantRoute, fallback, 'replace');
     if (version !== generation) return;
     $('admin-dashboard-entry').textContent = 'Dashboard';
-    $('admin-dashboard-entry').href = isAdmin ? 'dashboard.html' : 'workspace.html';
+    $('admin-dashboard-entry').href = hasManagement() ? 'dashboard.html' : 'workspace.html';
     $('admin-dashboard-entry').hidden = !landing;
     const regularUser = user()?.role === 'user';
     $('admin-refresh').hidden = regularUser;
-    $('profile-workspace').hidden = !regularUser;
-    $('profile-knowledge-bases').hidden = !regularUser || !can('bases.view');
     onRouteReady();
     if (page === 'knowledge-bases') $('knowledge-bases-title').focus({ preventScroll: true });
     await refresh(); if (version === generation) timer = setInterval(() => refresh(true), 30000);
@@ -633,14 +672,6 @@ export function createAdminPanel({ api, user, onError, sendUpload, onReady = () 
     navigate(page === 'knowledge-bases' ? 'workspace' : 'knowledge-bases');
   });
   $('admin-bell').addEventListener('click', () => navigate('requests'));
-  for (const destination of workspacePages) {
-    $(`profile-${destination}`).addEventListener('click', () => {
-      const menu = $('admin-menu');
-      menu.open = false;
-      menu.querySelector('summary').focus();
-      navigate(destination);
-    });
-  }
   $('admin-menu-toggle').addEventListener('click', () => {
     if ($('admin-sidebar').classList.contains('is-open')) { closeNavigation(true); return; }
     $('admin-sidebar').classList.add('is-open'); backdrop.hidden = false; $('admin-menu-toggle').setAttribute('aria-expanded', 'true');

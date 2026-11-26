@@ -274,10 +274,19 @@ body.workspace-page #knowledge-bases p { color:var(--dash-muted); margin:0; }
   font-size:12px;
   font-weight:650;
 }
-.knowledge-base-browse span { color:var(--base-accent); }
+.knowledge-base-browse span { color:var(--base-accent); transition:transform .16s ease-out; }
 .knowledge-base-card details[open] .knowledge-base-browse span { transform:rotate(90deg); }
 .knowledge-base-card > .button { margin:0 18px 14px; padding:6px 9px; }
 .knowledge-base-pdfs { display:grid; gap:6px; padding:0 18px 12px; }
+@media (prefers-reduced-motion:no-preference) {
+  .knowledge-base-card details[open] .knowledge-base-pdfs {
+    animation:knowledge-base-reveal .16s ease-out;
+  }
+  @keyframes knowledge-base-reveal {
+    from { opacity:0; transform:translateY(-3px); }
+    to { opacity:1; transform:translateY(0); }
+  }
+}
 .knowledge-base-pdf {
   display:flex;
   flex-wrap:wrap;
@@ -362,19 +371,29 @@ body:is(.admin-layout,.workspace-page) .request-card h3 { font-size:18px; overfl
 body:is(.admin-layout,.workspace-page) .request-card textarea { width:100%; }
 body:is(.admin-layout,.workspace-page) .approval-badge { font-size:12px; padding:5px 10px; border:1px solid #ffffff0b; }
 body:is(.admin-layout,.workspace-page) .user-details { font-size:13px; gap:20px 32px; }
-.user-activity { display:grid; gap:12px; }
-.user-activity > h3, .activity-base h4 { margin:0; }
-.activity-base {
+.user-activity { display:grid; gap:14px; margin-top:16px; }
+.user-activity > h3, .user-activity .activity-base :is(h4,h5) { margin:0; }
+.user-activity .activity-base {
   min-width:0;
-  padding:12px 15px;
+  padding:14px 16px;
   border:1px solid var(--dash-border);
   border-radius:10px;
   background:var(--dash-field);
   overflow-wrap:anywhere;
 }
-body.workspace-page .activity-base p { margin:4px 0; color:var(--dash-muted); font-size:13px; }
-.activity-tag-label { display:block; margin:10px 0 5px; color:var(--dash-muted); font-size:12px; }
-.activity-tags { display:flex; flex-wrap:wrap; gap:6px; }
+.activity-base-header { display:flex; align-items:baseline; justify-content:space-between; flex-wrap:wrap; gap:4px 16px; }
+.activity-base-header h4 { font-size:15px; }
+body.workspace-page .activity-base-header p { margin:0; color:var(--dash-muted); font-size:13px; }
+.activity-status-groups {
+  display:grid;
+  grid-template-columns:repeat(auto-fit,minmax(min(100%,230px),1fr));
+  gap:12px 20px;
+  margin-top:12px;
+  padding-top:12px;
+  border-top:1px solid var(--dash-border);
+}
+.activity-status-group h5 { color:var(--dash-muted); font-size:13px; }
+.activity-tags { display:flex; flex-wrap:wrap; gap:6px; margin-top:6px; }
 body:is(.admin-layout,.workspace-page) :is(button,a,summary):focus-visible { outline:2px solid #8db5ff; outline-offset:3px; }
 body:is(.admin-layout,.workspace-page) footer { padding-top:32px; margin-top:24px; border-color:var(--dash-border); }
 body:is(.admin-layout,.workspace-page) #dashboard-help { border-top:0; }
@@ -1894,6 +1913,130 @@ body.workspace-page .log-accordion-content {
 body.workspace-page .log-accordion-content :is(p,td) { overflow-wrap:anywhere; }
 body.workspace-page .log-accordion-content p { margin:6px 0; }
 body.workspace-page .log-accordion-content > .button { margin:8px 8px 0 0; }
+body.workspace-page .log-filters {
+  margin:12px 0 16px;
+  padding:12px 14px;
+  border:1px solid color-mix(in srgb,var(--app-control-line) 48%,transparent);
+  border-radius:10px;
+  background:color-mix(in srgb,var(--app-raised) 26%,transparent);
+}
+body.workspace-page .log-filter-fields {
+  display:grid;
+  grid-template-columns:repeat(2,minmax(8.5rem,1fr)) minmax(9rem,2fr) minmax(8rem,1fr) auto auto;
+  align-items:end;
+  gap:8px;
+}
+body.workspace-page .log-filter-field { display:grid; gap:5px; min-width:0; color:var(--app-muted); font-size:12px; }
+body.workspace-page .log-filter-fields :is(input,select,.button) { width:100%; min-width:0; min-height:40px; margin:0; padding:8px; }
+body.workspace-page .log-date-field { position:relative; }
+body.workspace-page .log-calendar-trigger {
+  position:absolute;
+  inset-block:3px;
+  inset-inline-end:3px;
+  width:30px;
+  border:0;
+  border-radius:6px;
+  background:transparent;
+}
+body.workspace-page .log-calendar {
+  position:fixed;
+  inset:auto;
+  margin:0;
+  width:min(290px,calc(100vw - 16px));
+  max-height:calc(100dvh - 16px);
+  overflow:auto;
+  padding:12px;
+  color-scheme:light;
+  color:#17365b;
+  background:linear-gradient(145deg,#fff 16%,#edf7ff 62%,#d6ebff);
+  border:1px solid #a9ccef;
+  border-radius:14px;
+  box-shadow:0 12px 32px #071d3a66,inset 0 1px 0 #fff;
+}
+body.workspace-page .log-calendar-header { display:grid; grid-template-columns:32px 1fr 32px; align-items:center; text-align:center; gap:6px; }
+body.workspace-page .log-calendar-days { display:grid; grid-template-columns:repeat(7,minmax(0,1fr)); gap:3px; margin-block:8px; text-align:center; }
+body.workspace-page .log-calendar-days > span { color:#486585; font-size:11px; }
+body.workspace-page .log-calendar-footer { display:flex; justify-content:space-between; border-top:1px solid #bdd5ec; padding-top:6px; }
+body.workspace-page .log-calendar-button {
+  min-height:32px;
+  border:1px solid transparent;
+  border-radius:7px;
+  background:transparent;
+  color:#17365b;
+  font-size:13px;
+}
+body.workspace-page .log-calendar-button:is(:hover,:focus-visible) { background:#d5eaff; }
+body.workspace-page .log-calendar-button[aria-current="date"] { border-color:#8bb6e1; }
+body.workspace-page .log-calendar-button[aria-pressed="true"] { background:#346fa8; color:#fff; }
+body.workspace-page .log-calendar-button:focus-visible { outline:2px solid #285e93; outline-offset:1px; }
+body.workspace-page .log-entry-count { margin-inline-start:auto; color:var(--app-muted); font-size:12px; font-weight:500; white-space:nowrap; }
+body.workspace-page :is(dialog.log-detail-dialog,#delete-document-dialog.management-detail-dialog)[open] {
+  width:min(520px,calc(100% - 32px));
+  padding:clamp(20px,4vw,28px);
+  color:#142b46;
+  color-scheme:light;
+  scrollbar-width:thin;
+  scrollbar-color:#a9bfd8 transparent;
+  background:#fbfcfe;
+  border:1px solid #e0e7f0;
+  border-radius:18px;
+  box-shadow:0 20px 56px #071d3a40,0 2px 8px #071d3a18;
+}
+body.workspace-page .management-detail-dialog::backdrop { background:#0b234b75; backdrop-filter:blur(3px); }
+body.workspace-page .management-detail-dialog h3 { margin:0; color:#142b46; font-size:20px; font-weight:650; line-height:1.25; }
+body.workspace-page .log-detail-header {
+  display:flex;
+  align-items:center;
+  justify-content:space-between;
+  gap:12px;
+  padding-bottom:13px;
+  border-bottom:1px solid #e0e7f0;
+}
+body.workspace-page .log-detail-dialog .user-details {
+  grid-template-columns:minmax(86px,29%) minmax(0,1fr);
+  align-items:baseline;
+  gap:11px 18px;
+  margin:15px 0 0;
+  padding:0;
+  font-size:14px;
+}
+body.workspace-page .log-detail-dialog dt { color:#4b6078; }
+body.workspace-page .log-detail-dialog dd { color:#142b46; font-weight:550; overflow-wrap:anywhere; }
+body.workspace-page .log-detail-status {
+  display:inline-block;
+  padding:2px 9px;
+  border-radius:999px;
+  background:#e8eff8;
+  color:#284d76;
+  font-size:12px;
+  font-weight:650;
+}
+body.workspace-page .log-detail-status[data-outcome="signed_in"] { background:#e5f1ec; color:#225b49; }
+body.workspace-page .log-detail-status:is([data-outcome="invalid_code"],[data-outcome="invalid_credentials"]) { background:#f5e9e8; color:#813f3a; }
+body.workspace-page :is(#admin-app .log-detail-dialog .management-dismiss,#delete-document-dialog.management-detail-dialog .button.secondary) {
+  min-height:36px;
+  margin:0;
+  padding:7px 12px;
+  color:#264866;
+  background:#f1f5fa;
+  border:1px solid #dce5ef;
+  border-radius:8px;
+  box-shadow:none;
+}
+body.workspace-page :is(#admin-app .log-detail-dialog .management-dismiss,#delete-document-dialog.management-detail-dialog .button.secondary):is(:hover,:focus-visible) {
+  color:#142b46;
+  background:#e7eef7;
+  border-color:#bacce0;
+}
+body.workspace-page #delete-document-dialog.management-detail-dialog #delete-document-description { color:#4b6078; margin-top:10px; }
+body.workspace-page #delete-document-dialog.management-detail-dialog #confirm-permanent-delete { color:#fff; background:#233f63; border-color:transparent; box-shadow:none; }
+body.workspace-page #delete-document-dialog.management-detail-dialog #confirm-permanent-delete:is(:hover,:focus-visible) { background:#31557f; }
+@media (max-width:1100px) {
+  body.workspace-page .log-filter-fields { grid-template-columns:repeat(3,minmax(0,1fr)); }
+}
+@media (max-width:640px) {
+  body.workspace-page .log-filter-fields { grid-template-columns:repeat(2,minmax(0,1fr)); }
+}
 body.workspace-page .revision-meta { display:flex; align-items:baseline; flex-wrap:wrap; gap:8px 16px; }
 body.workspace-page .revision-entry :is(time,p) { color:var(--app-muted); overflow-wrap:anywhere; }
 body.workspace-page .revision-entry p { margin:4px 0; }
@@ -1968,3 +2111,24 @@ body.workspace-page #admin-app #workspace #upload:disabled {
   backdrop-filter:none;
   box-shadow:none;
 }
+
+
+.audit-entry-form {
+  display: grid;
+  gap: .75rem;
+}
+.audit-entry-form label {
+  display: grid;
+  gap: .3rem;
+  color: #142b46;
+}
+.audit-entry-form :is(select, textarea) {
+  width: 100%;
+  color: #142b46;
+  background: #fff;
+  border: 1px solid #7a93ad;
+  border-radius: .5rem;
+  padding: .6rem;
+}
+.audit-entry-form textarea { resize: vertical; }
+.audit-entry-form [role="status"]:empty { display: none; }

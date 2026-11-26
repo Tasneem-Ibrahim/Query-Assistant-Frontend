@@ -60,13 +60,15 @@
     </form>
   </div>
   <div id="admin-app" hidden inert>
-  <aside id="admin-sidebar" class="admin-sidebar" hidden aria-label="Admin navigation">
-    <a class="sidebar-brand" href="index.html" aria-label="Query Assistant home"><img src="assets/query-assistant-logo.svg" alt="" width="34" height="34"><div>Query Assistant <span>Admin workspace</span></div></a>
+  <aside id="admin-sidebar" class="admin-sidebar" hidden aria-label="Workspace navigation">
+    <a class="sidebar-brand" href="index.html" aria-label="Query Assistant home"><img src="assets/query-assistant-logo.svg" alt="" width="34" height="34"><div>Query Assistant <span id="sidebar-role-label">Admin workspace</span></div></a>
     <button type="button" data-admin-page="home">Home</button>
     <button type="button" data-admin-page="dashboard">Dashboard</button>
     <button type="button" data-admin-page="knowledge-bases">Knowledge Bases</button>
-    <div class="sidebar-group">User management</div>
+    <button type="button" data-admin-page="documents" hidden>PDFs and Images</button>
+    <div class="sidebar-group" id="user-management-label">User management</div>
     <button type="button" data-super-page="workspace" hidden>Workspace</button>
+    <button type="button" data-super-page="user-uploads" hidden>User Uploads</button>
     <button type="button" data-super-page="roles" hidden>Role Management</button>
     <button type="button" data-admin-page="users">All users</button>
     <button type="button" data-admin-page="requests">Upload requests <span id="admin-pending" class="count">0</span></button>
@@ -88,8 +90,6 @@
       <details id="admin-menu" class="admin-menu">
         <summary><span id="account-name">Account</span> <svg class="admin-chevron" viewBox="0 0 16 16" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true"><path d="m4 6 4 4 4-4"/></svg></summary>
         <div class="admin-dropdown">
-          <button id="profile-workspace" type="button" hidden>Workspace</button>
-          <button id="profile-knowledge-bases" type="button" hidden>Knowledge Bases</button>
           <button id="admin-logout" type="button">Sign out</button>
         </div>
       </details>

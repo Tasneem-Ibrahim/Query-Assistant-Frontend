@@ -47,7 +47,7 @@ let managedUploadAccount = null;
 let selectedWorkspaceAccount = null;
 
 async function switchWorkspace(person, status, destination = person ? 'workspace' : 'users', historyMode = 'push') {
-  const delegated = state.user?.role === 'admin' && Boolean(person);
+  const delegated = state.user?.role !== 'super_admin' && Boolean(person);
   if (state.busy || [...pdfTabs.values()].some(tab => tab.isDirty?.())) {
     status.textContent = 'Finish processing or save your document edits before switching workspaces.';
     return false;
@@ -91,6 +91,7 @@ const superPanel = createSuperAdminPanel({
   openWorkspace: switchWorkspace,
   openKnowledgeBases: (person, status) => switchWorkspace(person, status, 'knowledge-bases'),
   confirmDeletion: (...args) => confirmDeletion(...args),
+  confirmRevision: (title, description) => confirmDeletion(title, description, 'Reverse', { revision: true }),
 });
 const adminPanel = createAdminPanel({ user: () => state.user, onError: message => notice(message),
   onManageUploads: switchWorkspace,
@@ -130,16 +131,18 @@ function controls() {
   savedProcessor.kick();
   const unavailable = !state.online || state.busy;
   for (const id of ['domain', 'bundled', 'refresh', 'reset', 'new-domain', 'rename-domain', 'delete-domain']) $(id).disabled = unavailable;
-  $('new-domain').disabled ||= !permitted('bases.add');
+  $('new-domain').disabled ||= !permitted('bases.view') || !permitted('bases.add');
   $('delete-domain').disabled = unavailable || !permitted('bases.delete') || !permitted('documents.delete') || !state.domains.find(d => d.key === state.key)?.custom;
   for (const id of ['pdf', 'bundled', 'refresh', 'reset', 'rename-domain']) $(id).disabled = unavailable || !state.key;
+  $('refresh').disabled ||= !permitted('documents.view');
   $('rename-domain').disabled ||= !permitted('bases.edit');
   for (const id of ['pdf', 'bundled']) $(id).disabled ||= !permitted('documents.add');
   if (managedUploadAccount) $('pdf').disabled ||= !permitted('user_uploads.add');
+  if (state.user?.id === 'local-admin' && state.user.direct_upload_restricted) $('pdf').disabled = true;
   $('reset').disabled ||= !permitted('bases.delete') || !permitted('documents.delete');
   document.querySelectorAll('.view-image-text, .view-pdf').forEach(button => { button.disabled = unavailable || button.dataset.ready === 'false'; });
   $('upload').disabled = unavailable || !state.key || !state.file || !permitted('documents.add')
-    || Boolean(managedUploadAccount && !permitted('user_uploads.add'));
+    || Boolean(managedUploadAccount && !permitted('user_uploads.add')) || $('pdf').disabled;
   const uploadNote = $('upload-request-message'); if (uploadNote) uploadNote.disabled = $('upload').disabled;
   $('question').disabled = unavailable || !state.status?.chunks;
   if (unavailable || !state.status?.chunks) voice.pause('Paused while the workspace is unavailable. Resume when ready.');
@@ -251,13 +254,13 @@ function renderStatus() {
     heading.append(title, remove);
     info.append(heading, node('small', '', state.status?.pending_files?.[fileHash] ? `${file.pages} pages · Processing incomplete` : `${file.pages} pages · ${file.chunks} passages`));
     const isImage = /\.(jpe?g|png|jfif|webp|bmp|tiff?|avif)$/i.test(file.name);
-    if (!managedUploadAccount && isImage && !state.status?.pending_files?.[fileHash]) {
+    if (isImage && !state.status?.pending_files?.[fileHash]) {
       const view = node('button', 'view-image-text', 'View text');
       view.type = 'button'; view.setAttribute('aria-label', `View extracted text from ${file.name}`);
       view.addEventListener('click', () => showImageText(fileHash));
       info.append(view);
     }
-    if (!managedUploadAccount && (/\.pdf$/i.test(file.name) || isImage)) {
+    if (/\.pdf$/i.test(file.name) || isImage) {
       const view = node('button', 'button secondary view-pdf', 'View document');
       view.type = 'button'; view.setAttribute('aria-label', `View and edit processed chunks: ${file.name}`);
       view.dataset.ready = state.status?.pending_files?.[fileHash] ? 'false' : 'true';
@@ -414,10 +417,12 @@ async function openPdf(fileHash, filename) {
     if (pdfTabs.get(fileHash) !== tab || generation !== state.generation) return;
     const heading = node('div', 'editor-heading');
     heading.append(node('span', 'editor-eyebrow', 'YOUR DOCUMENT'), node('h3', '', filename));
-    const intro = node('p', 'editor-help', 'Review your processed text, make changes, then save.');
+    const editable = permitted('documents.edit') && (!managedUploadAccount || permitted('user_uploads.edit'));
+    const intro = node('p', 'editor-help', editable ? 'Review your processed text, make changes, then save.' : 'Review your processed text.');
     const explanation = node('details', 'editor-explanation');
     explanation.append(node('summary', '', 'How saving works'), node('p', '', 'Saving cleans the text, removes duplicate chunks and updates search. Page numbers refer to the original PDF; choose a source page for added text.'));
-    heading.append(intro, explanation);
+    heading.append(intro);
+    if (editable) heading.append(explanation);
     const scroll = node('div', 'editor-scroll');
     const list = node('div', 'editor-chunks');
     const toolbar = node('div', 'editor-toolbar');
@@ -440,6 +445,7 @@ async function openPdf(fileHash, filename) {
       const remove = node('button', 'button secondary', 'Remove chunk'); remove.type = 'button';
       const text = node('textarea'); text.value = part.text; text.rows = 2;
       text.setAttribute('aria-label', 'Chunk text'); text.maxLength = 100000;
+      text.readOnly = page.readOnly = !editable;
       const fitText = () => {
         if (!text.clientWidth) return;
         text.style.height = 'auto';
@@ -447,7 +453,8 @@ async function openPdf(fileHash, filename) {
       };
       text.addEventListener('input', () => { fitText(); changed(); }); page.addEventListener('input', changed);
       remove.addEventListener('click', () => { card.remove(); numberChunks(); changed(); });
-      label.append(page); header.append(number, label, remove); card.append(header, text); list.append(card); numberChunks(); requestAnimationFrame(fitText);
+      label.append(page); header.append(number, label); if (editable) header.append(remove);
+      card.append(header, text); list.append(card); numberChunks(); requestAnimationFrame(fitText);
     };
     const render = () => { list.replaceChildren(); saved.chunks.forEach(addChunk); };
     add.type = save.type = 'button'; save.disabled = true;
@@ -487,7 +494,8 @@ async function openPdf(fileHash, filename) {
     scroll.append(heading, list);
     toolbar.setAttribute('aria-label', 'Document save actions');
     toolbar.append(add, message, save);
-    panel.replaceChildren(scroll, toolbar);
+    panel.replaceChildren(scroll);
+    if (editable) panel.append(toolbar);
     let editorWidth = 0;
     tab.editorResize = new ResizeObserver(() => {
       const width = list.clientWidth;
@@ -526,7 +534,7 @@ async function showImageText(fileHash) {
 }
 $('close-ocr-preview').addEventListener('click', clearImageText);
 async function refresh() {
-  if (!state.key) { state.status = null; renderStatus(); return; }
+  if (!state.key || !permitted('documents.view')) { state.status = null; renderStatus(); return; }
   const key = state.key, generation = state.generation;
   state.status = null; controls();
   try { const result = await json(`/domains/${encodeURIComponent(key)}/status`); if (key === state.key && generation === state.generation) state.status = result; }
@@ -547,9 +555,10 @@ async function refreshApprovedDocuments(rows = []) {
   await refresh();
 }
 let confirmationPending = false;
-function confirmDeletion(title, description, actionLabel = 'Permanently delete') {
+function confirmDeletion(title, description, actionLabel = 'Permanently delete', { revision = false } = {}) {
   const dialog = $('delete-document-dialog');
   if (confirmationPending || dialog.open) return Promise.resolve(false);
+  dialog.classList.toggle('management-detail-dialog', revision);
   $('delete-document-title').textContent = title;
   $('delete-document-description').textContent = description;
   $('confirm-permanent-delete').textContent = actionLabel;
@@ -558,6 +567,7 @@ function confirmDeletion(title, description, actionLabel = 'Permanently delete')
   return new Promise(resolve => {
     dialog.addEventListener('close', () => {
       confirmationPending = false;
+      dialog.classList.remove('management-detail-dialog');
       resolve(dialog.returnValue === 'delete');
     }, { once: true });
     dialog.showModal();
@@ -1104,3 +1114,29 @@ async function resumeSession() {
 authChanges?.addEventListener('message', () => resumeSession());
 window.addEventListener('pageshow', event => { if (event.persisted) resumeSession(); });
 resumeSession();
+
+let checkingPermissions = false;
+async function checkCurrentPermissions() {
+  const previous = state.user;
+  if (!previous || checkingPermissions) return;
+  checkingPermissions = true;
+  try {
+    const { user } = await json('/auth/session');
+    if (state.user !== previous) return;
+    const keys = new Set([...Object.keys(previous.permissions || {}), ...Object.keys(user.permissions || {})]);
+    if (user.id !== previous.id || user.role !== previous.role
+        || user.access_suspended !== previous.access_suspended
+        || user.direct_upload_restricted !== previous.direct_upload_restricted
+        || JSON.stringify(user.account_scope || []) !== JSON.stringify(previous.account_scope || [])
+        || [...keys].some(key => user.permissions?.[key] !== previous.permissions?.[key])) {
+      await openWorkspace(user);
+    }
+  } catch (error) {
+    if (state.user === previous && error.status === 403) await resumeSession();
+  } finally {
+    checkingPermissions = false;
+  }
+}
+window.setInterval(() => { if (!document.hidden) void checkCurrentPermissions(); }, 15000);
+document.addEventListener('visibilitychange', () => { if (!document.hidden) void checkCurrentPermissions(); });
+$('admin-refresh').addEventListener('click', () => void checkCurrentPermissions());
