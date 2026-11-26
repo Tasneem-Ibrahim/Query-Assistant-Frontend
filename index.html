@@ -65,13 +65,20 @@
     <button type="button" data-admin-page="home">Home</button>
     <button type="button" data-admin-page="dashboard">Dashboard</button>
     <button type="button" data-admin-page="knowledge-bases">Knowledge Bases</button>
-    <button type="button" data-admin-page="documents" hidden>PDFs and Images</button>
     <div class="sidebar-group" id="user-management-label">User management</div>
     <button type="button" data-super-page="workspace" hidden>Workspace</button>
-    <button type="button" data-super-page="user-uploads" hidden>User Uploads</button>
     <button type="button" data-super-page="roles" hidden>Role Management</button>
-    <button type="button" data-admin-page="users">All users</button>
-    <button type="button" data-admin-page="requests">Upload requests <span id="admin-pending" class="count">0</span></button>
+    <button type="button" id="all-users-toggle" aria-expanded="false" aria-controls="all-users-links" hidden>
+      All Users
+      <svg class="sidebar-chevron" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" aria-hidden="true"><path d="m6 9 6 6 6-6"/></svg>
+    </button>
+    <div id="all-users-links" class="sidebar-user-links">
+      <button type="button" data-admin-page="users"><span id="sidebar-users-label">All users</span></button>
+      <button type="button" data-super-page="user-uploads" hidden>User Uploads</button>
+      <button type="button" data-admin-page="requests">Upload Requests <span id="admin-pending" class="count">0</span></button>
+      <button type="button" data-user-workspace-page="workspace" disabled hidden>User Workspace</button>
+      <button type="button" data-user-workspace-page="knowledge-bases" disabled hidden>User Knowledge Bases</button>
+    </div>
     <div class="sidebar-group" id="super-settings-label" hidden>Settings</div>
     <button type="button" data-super-page="permission-list" hidden>Permissions List</button>
     <button type="button" data-super-page="permissions" hidden>Permission Matrix</button>

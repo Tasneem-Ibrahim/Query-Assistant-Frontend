@@ -175,6 +175,49 @@ body:is(.admin-layout,.workspace-page) .admin-sidebar button[aria-current="page"
 body:is(.admin-layout,.workspace-page) .admin-sidebar button[aria-current="page"]::after { content:''; position:absolute; left:0; height:18px; width:3px; background:var(--dash-blue); border-radius:4px; }
 body:is(.admin-layout,.workspace-page) .admin-sidebar button svg { flex-shrink:0; width:18px; height:18px; opacity:.85; }
 body:is(.admin-layout,.workspace-page) .admin-sidebar .count { margin-left:auto; font-size:10px; border-radius:6px; padding:3px 7px; background:#518aff1a; color:#accbff; }
+body:is(.admin-layout,.workspace-page) .admin-sidebar { overflow-y:auto; }
+
+@media (forced-colors: none) {
+  #admin-sidebar {
+    --sidebar-scroll-opacity:65%;
+    --sidebar-scroll-track:color-mix(in srgb,#9bc8fb12 var(--sidebar-scroll-opacity),transparent);
+    --sidebar-scroll-thumb-color:#789dc9;
+    scrollbar-width:thin;
+    scrollbar-color:color-mix(in srgb,var(--sidebar-scroll-thumb-color) var(--sidebar-scroll-opacity),transparent) var(--sidebar-scroll-track);
+  }
+
+  @supports selector(::-webkit-scrollbar) {
+    #admin-sidebar {
+      scrollbar-width:auto;
+      scrollbar-color:auto;
+    }
+    #admin-sidebar::-webkit-scrollbar { width:8px; height:8px; }
+    #admin-sidebar::-webkit-scrollbar-track,
+    #admin-sidebar::-webkit-scrollbar-thumb {
+      border:1px solid transparent;
+      border-radius:999px;
+      background-clip:padding-box;
+    }
+    #admin-sidebar::-webkit-scrollbar-track { background-color:var(--sidebar-scroll-track); }
+    #admin-sidebar::-webkit-scrollbar-thumb {
+      --thumb-highlight:color-mix(in srgb,var(--sidebar-scroll-thumb-color) 67%,#f0f7ff);
+      --thumb-shadow:color-mix(in srgb,var(--sidebar-scroll-thumb-color) 73%,#163861);
+      background-image:linear-gradient(90deg,
+        color-mix(in srgb,var(--thumb-highlight) var(--sidebar-scroll-opacity),transparent),
+        color-mix(in srgb,var(--sidebar-scroll-thumb-color) var(--sidebar-scroll-opacity),transparent) 55%,
+        color-mix(in srgb,var(--thumb-shadow) var(--sidebar-scroll-opacity),transparent));
+    }
+    #admin-sidebar::-webkit-scrollbar-thumb:hover,
+    #admin-sidebar::-webkit-scrollbar-thumb:active {
+      --sidebar-scroll-thumb-color:var(--app-blue,#9bc8fb);
+    }
+  }
+}
+
+.sidebar-user-links:not(.is-grouped):not([hidden]) { display:contents; }
+.sidebar-user-links.is-grouped { margin-left:12px; padding-left:6px; border-left:1px solid var(--dash-border); }
+#all-users-toggle .sidebar-chevron { margin-left:auto; width:14px; height:14px; }
+#all-users-toggle[aria-expanded="true"] .sidebar-chevron { transform:rotate(180deg); }
 body:is(.admin-layout,.workspace-page) .nav { min-height:104px; height:auto; gap:16px; border-color:var(--dash-border); }
 body:is(.admin-layout,.workspace-page) .nav > .brand { display:none; }
 body:is(.admin-layout,.workspace-page) .dashboard-heading { display:block; margin-right:auto; }
@@ -983,7 +1026,6 @@ body.workspace-page #admin-sidebar {
   border-color:var(--app-line);
   backdrop-filter:none;
   overflow-y:auto;
-  scrollbar-width:thin;
 }
 body.workspace-page #admin-sidebar button {
   min-height:44px;

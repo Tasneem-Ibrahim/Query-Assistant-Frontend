@@ -26,7 +26,7 @@ export function createAdminPanel({ api, user, onError, sendUpload, onReady = () 
     $('dashboard-page-title').textContent = 'Workspace';
     $('workspace-title').textContent = 'Documents & assistant';
   }
-  const pages = ['users', 'requests', 'knowledge-bases', 'documents', 'user-details-add'];
+  const pages = ['users', 'requests', 'knowledge-bases', 'user-details-add'];
   const superPages = ['roles', 'permission-list', 'permissions', 'user-uploads', 'login-logs', 'revisions', 'workspace'];
   const superPermissions = { roles: 'roles.view', 'user-uploads': 'user_uploads.view', 'permission-list': 'permissions.view', permissions: 'permissions.view',
     'login-logs': 'logs.view', revisions: 'revisions.view' };
@@ -36,11 +36,10 @@ export function createAdminPanel({ api, user, onError, sendUpload, onReady = () 
     && user()?.permissions?.[superPermissions[page]] === true);
   const scoped = person => isSuper() || (person.id !== user()?.id && (
     user()?.account_scope?.includes(person.id) || user()?.account_scope?.includes('role:' + (person.role || 'user'))));
-  const workspacePages = ['workspace', 'knowledge-bases', 'documents'];
+  const workspacePages = ['workspace', 'knowledge-bases'];
   const canVisit = destination => {
     if (destination === 'user-details-add') return canAddUser();
     const regular = user()?.role === 'user';
-    if (destination === 'documents') return regular && canVisit('workspace') && user()?.permissions?.['documents.view'] === true;
     if (destination === 'dashboard') return !regular;
     if (superPages.includes(destination) && destination !== 'workspace') return showSuperPage(destination);
     const permission = pagePermissions[destination];
@@ -53,7 +52,6 @@ export function createAdminPanel({ api, user, onError, sendUpload, onReady = () 
   let activeRoute;
   const paths = { home: 'm3 10 9-7 9 7v10a1 1 0 0 1-1 1h-5v-7H9v7H4a1 1 0 0 1-1-1Z',
     dashboard: 'M3 3h7v7H3z M14 3h7v7h-7z M3 14h7v7H3z M14 14h7v7h-7z',
-    documents: 'M6 3h8l4 4v14H6z M14 3v5h4 M9 13h6 M9 17h6',
     'knowledge-bases': 'M3 6a2 2 0 0 1 2-2h5l2 2h7a2 2 0 0 1 2 2v10a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2Z M7 11h10 M7 15h7',
     users: 'M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2 M9 3a4 4 0 1 0 0 8 4 4 0 0 0 0-8 M20 21v-2a4 4 0 0 0-3-3.87 M16 3.13a4 4 0 0 1 0 7.75',
     requests: 'M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8Z M14 2v6h6 M8 15l3 3 5-5',
@@ -64,11 +62,19 @@ export function createAdminPanel({ api, user, onError, sendUpload, onReady = () 
     'user-uploads': 'M12 16V3 M7 8l5-5 5 5 M4 16v5h16v-5',
     'login-logs': 'M5 4h10l4 4v12H5z M15 4v5h4 M8 12h8 M8 16h8',
     revisions: 'M3 12a9 9 0 1 1 2.6 6.4 M3 6v6h6 M12 7v5l3 2' };
-  document.querySelectorAll('[data-admin-page], [data-super-page]').forEach(n => {
+  const allUsersToggle = $('all-users-toggle');
+  const allUsersLinks = $('all-users-links');
+  const userWorkspaceLinks = [...allUsersLinks.querySelectorAll('[data-user-workspace-page]')];
+  function setAllUsersOpen(open) {
+    allUsersToggle.setAttribute('aria-expanded', String(open));
+    allUsersLinks.hidden = !open;
+  }
+  allUsersToggle.addEventListener('click', () => setAllUsersOpen(allUsersLinks.hidden));
+  document.querySelectorAll('[data-admin-page], [data-super-page], [data-user-workspace-page], #all-users-toggle').forEach(n => {
     const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
     svg.setAttribute('viewBox', '0 0 24 24'); svg.setAttribute('fill', 'none'); svg.setAttribute('stroke', 'currentColor');
     svg.setAttribute('stroke-width', '1.6'); svg.setAttribute('stroke-linejoin', 'round'); svg.setAttribute('stroke-linecap', 'round'); svg.setAttribute('aria-hidden', 'true');
-    const path = document.createElementNS(svg.namespaceURI, 'path'); path.setAttribute('d', paths[n.dataset.adminPage || n.dataset.superPage]); svg.append(path); n.prepend(svg);
+    const path = document.createElementNS(svg.namespaceURI, 'path'); path.setAttribute('d', paths[n.dataset.adminPage || n.dataset.superPage || n.dataset.userWorkspacePage || 'users']); svg.append(path); n.prepend(svg);
   });
   const backdrop = document.createElement('button'); backdrop.className = 'dashboard-backdrop'; backdrop.hidden = true;
   backdrop.type = 'button'; backdrop.setAttribute('aria-label', 'Close navigation'); $('admin-app').append(backdrop);
@@ -96,6 +102,7 @@ export function createAdminPanel({ api, user, onError, sendUpload, onReady = () 
     $('knowledge-base-list').replaceChildren();
     $('admin-bell').hidden = true; $('admin-menu-toggle').hidden = true; $('admin-sync-status').textContent = '';
     $('admin-dashboard-entry').hidden = true; $('admin-sync').hidden = true;
+    setAllUsersOpen(false);
     closeNavigation();
   }
   async function refresh(background = false) {
@@ -170,19 +177,33 @@ export function createAdminPanel({ api, user, onError, sendUpload, onReady = () 
         history[push ? 'pushState' : 'replaceState']({ queryAssistantRoute: activeRoute }, '', path + location.search + hash);
       }
     }
-    $('dashboard-page-title').textContent = ({ dashboard: 'Dashboard', documents: 'PDFs and Images', users: 'Users', 'user-details-add': 'Add User', requests: 'Upload requests', 'knowledge-bases': 'Knowledge Bases', roles: 'Role Management', 'permission-list': 'Permissions List', permissions: 'Permission Matrix', 'login-logs': 'Logs Management', 'user-uploads': 'User Uploads', revisions: 'Revision' })[next] || 'Workspace';
+    $('dashboard-page-title').textContent = ({ dashboard: 'Dashboard', users: 'Users', 'user-details-add': 'Add User', requests: 'Upload requests', 'knowledge-bases': 'Knowledge Bases', roles: 'Role Management', 'permission-list': 'Permissions List', permissions: 'Permission Matrix', 'login-logs': 'Logs Management', 'user-uploads': 'User Uploads', revisions: 'Revision' })[next] || 'Workspace';
     const home = next === 'home';
     document.body.classList.toggle('admin-layout', sidebar && !home);
     $('admin-sidebar').hidden = !sidebar || home; $('admin-menu-toggle').hidden = !sidebar || home;
     $('sidebar-role-label').textContent = user()?.role === 'user' ? 'User workspace' : 'Admin workspace';
     $('admin-dashboard-entry').hidden = !home; $('admin-sync').hidden = home || browsing;
     $('admin-bell').hidden = !sidebar || home || !canVisit('requests');
-    $('workspace').hidden = !canVisit('workspace') || (!['workspace', 'documents'].includes(next) && (next !== 'dashboard' || isSuper()));
+    $('workspace').hidden = !canVisit('workspace') || (next !== 'workspace' && (next !== 'dashboard' || isSuper()));
     $('super-workspace-scope').hidden = !(isSuper() || managingUploads())
       || next !== 'workspace' || !$('super-workspace-scope').textContent;
+    const grouped = isAdminAccount();
+    const accountScoped = grouped && Boolean(workspaceAccount());
+    const canOpenUserWorkspace = grouped && canVisit('workspace') && showSuperPage('user-uploads');
+    const inAllUsers = ['users', 'user-details-add', 'user-uploads', 'requests'].includes(next) || accountScoped;
+    allUsersToggle.hidden = !grouped || !(['users', 'user-uploads', 'requests'].some(canVisit) || canOpenUserWorkspace);
+    allUsersLinks.classList.toggle('is-grouped', grouped);
+    $('sidebar-users-label').textContent = grouped ? 'User Details' : 'All users';
+    setAllUsersOpen(!grouped || (inAllUsers && !allUsersToggle.hidden));
+    for (const link of userWorkspaceLinks) {
+      link.hidden = !canOpenUserWorkspace;
+      link.disabled = !accountScoped;
+      link.title = accountScoped ? '' : 'Open an account from User Details or User Uploads first.';
+      link.setAttribute('aria-current', accountScoped && link.dataset.userWorkspacePage === next ? 'page' : 'false');
+    }
     document.querySelectorAll('[data-super-page]').forEach(button => {
       button.hidden = !canVisit(button.dataset.superPage)
-        || (button.dataset.superPage === 'workspace' && !isSuper() && user()?.role !== 'user');
+        || (button.dataset.superPage === 'workspace' && (accountScoped || (!isSuper() && user()?.role !== 'user')));
       button.setAttribute('aria-current', button.dataset.superPage === next ? 'page' : 'false');
     });
     $('super-settings-label').hidden = !['permission-list', 'permissions', 'login-logs', 'revisions'].some(canVisit);
@@ -196,7 +217,7 @@ export function createAdminPanel({ api, user, onError, sendUpload, onReady = () 
     browseLink.href = browsing ? 'workspace.html' : '#knowledge-bases';
     browseLink.textContent = browsing ? 'Workspace' : 'Knowledge Bases';
     document.querySelectorAll('[data-admin-page]').forEach(n => {
-      n.hidden = !canVisit(n.dataset.adminPage);
+      n.hidden = !canVisit(n.dataset.adminPage) || (accountScoped && n.dataset.adminPage === 'knowledge-bases');
       n.setAttribute('aria-current', n.dataset.adminPage === next ? 'page' : 'false');
     });
     closeNavigation();
@@ -205,8 +226,7 @@ export function createAdminPanel({ api, user, onError, sendUpload, onReady = () 
       $('knowledge-bases-title').focus({ preventScroll: true });
     }
     if (['users', 'requests'].includes(next)) render();
-    if (next === 'documents') $('documents').scrollIntoView({ block: 'nearest' });
-    else window.scrollTo({ top: 0, behavior: 'instant' });
+    window.scrollTo({ top: 0, behavior: 'instant' });
   }
   async function restoreRoute(route, fallback, historyMode) {
     const previous = activeRoute;
@@ -667,6 +687,13 @@ export function createAdminPanel({ api, user, onError, sendUpload, onReady = () 
   }
   document.querySelectorAll('[data-admin-page]').forEach(n => n.addEventListener('click', () => navigate(n.dataset.adminPage)));
   document.querySelectorAll('[data-super-page]').forEach(n => n.addEventListener('click', () => navigate(n.dataset.superPage)));
+  for (const link of userWorkspaceLinks) {
+    link.addEventListener('click', () => {
+      if (workspaceAccount() && canVisit(link.dataset.userWorkspacePage) && showSuperPage('user-uploads')) {
+        navigate(link.dataset.userWorkspacePage);
+      }
+    });
+  }
   $('knowledge-bases-link').addEventListener('click', event => {
     event.preventDefault();
     navigate(page === 'knowledge-bases' ? 'workspace' : 'knowledge-bases');
@@ -682,7 +709,8 @@ export function createAdminPanel({ api, user, onError, sendUpload, onReady = () 
     if (backdrop.hidden) return;
     if (event.key === 'Escape') { closeNavigation(true); return; }
     if (event.key === 'Tab') {
-      const items = [...$('admin-sidebar').querySelectorAll('a[href], button:not([hidden])')];
+      const items = [...$('admin-sidebar').querySelectorAll('a[href], button:not(:disabled)')]
+        .filter(item => !item.closest('[hidden]'));
       const first = items[0], last = items.at(-1);
       if (event.shiftKey && document.activeElement === first) { event.preventDefault(); last.focus(); }
       else if (!event.shiftKey && document.activeElement === last) { event.preventDefault(); first.focus(); }
