@@ -339,7 +339,24 @@ body.workspace-page #knowledge-bases p { color:var(--dash-muted); margin:0; }
   padding-top:8px;
 }
 .knowledge-base-pdf strong { flex:1 1 160px; min-width:0; overflow-wrap:anywhere; }
-.knowledge-base-pdf .button { padding:6px 10px; }
+#admin-app .knowledge-base-card .knowledge-base-pdf > .button.secondary:not([aria-pressed="true"]) {
+  flex:none;
+  min-height:44px;
+  padding:8px 14px;
+  border:1px solid #7fb5ee;
+  background:#244e82;
+  color:#f5f9ff;
+  font-weight:650;
+  white-space:nowrap;
+}
+#admin-app .knowledge-base-card .knowledge-base-pdf > .button.secondary:is(:hover,:focus-visible):not(:disabled) {
+  background:#32639c;
+  border-color:#b9daff;
+}
+#admin-app .knowledge-base-pdf > .button:focus-visible {
+  outline:2px solid #b9daff;
+  outline-offset:2px;
+}
 body:is(.admin-layout,.workspace-page) .workspace > .section-heading { margin-bottom:22px; align-items:center; }
 body:is(.admin-layout,.workspace-page) .workspace > .section-heading h2 { font-size:25px; letter-spacing:-.025em; margin:0; font-weight:650; }
 body:is(.admin-layout,.workspace-page) .workspace > .section-heading .eyebrow { font-size:8px; color:#6f89ad; }
