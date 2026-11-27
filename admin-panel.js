@@ -14,19 +14,20 @@ export function createAdminPanel({ api, user, onError, sendUpload, onReady = () 
   let refreshId = 0, activeRefresh = null, lastRefresh = 0, renderedOwn;
   let message = '';
   let selectedFile = null, selectedDomain = '';
-  const landing = !/\/(workspace|dashboard)\.html$/.test(location.pathname);
+  let landing = !/\/(workspace|dashboard)\.html$/.test(location.pathname);
   const how = $('how-it-works');
   const footer = document.querySelector('#admin-app footer');
   const help = document.createElement('details'); help.id = 'dashboard-help';
   const helpTitle = el('summary', 'How it works'); help.append(helpTitle, how); footer.prepend(help);
   document.querySelectorAll('#admin-app .brand').forEach(n => { n.href = 'index.html'; });
-  document.body.classList.toggle('landing-page', landing);
-  document.body.classList.toggle('workspace-page', !landing);
-  if (!landing) {
-    document.querySelector('#admin-menu .admin-dropdown').prepend($('admin-refresh'));
-    $('dashboard-page-title').textContent = 'Workspace';
-    $('workspace-title').textContent = 'Documents & assistant';
+  const refreshButton = $('admin-refresh');
+  const adminDropdown = document.querySelector('#admin-menu .admin-dropdown');
+  function applyLayout() {
+    document.body.classList.toggle('landing-page', landing);
+    document.body.classList.toggle('workspace-page', !landing);
+    (landing ? $('admin-sync') : adminDropdown).prepend(refreshButton);
   }
+  applyLayout();
   const pages = ['users', 'requests', 'knowledge-bases', 'user-details-add', 'my-account'];
   const superPages = ['roles', 'permission-list', 'permissions', 'user-uploads', 'login-logs', 'revisions', 'workspace'];
   const superPermissions = { roles: 'roles.view', 'user-uploads': 'user_uploads.view', 'permission-list': 'permissions.view', permissions: 'permissions.view',
@@ -170,17 +171,20 @@ export function createAdminPanel({ api, user, onError, sendUpload, onReady = () 
       return;
     }
     if (!canVisit(next)) { next = defaultRoute(); historyMode = 'replace'; }
-    if (next === 'home' && !landing) { location.assign('index.html'); return; }
-    if (next === 'workspace' && landing) { location.assign('workspace.html'); return; }
-    if (next === 'my-account' && landing) { location.assign('workspace.html#my-account'); return; }
-    if (next !== 'home' && landing) { location.assign(`dashboard.html${next === 'dashboard' ? '' : '#' + next}`); return; }
+    const home = next === 'home';
+    const layoutChanged = landing !== home;
+    if (layoutChanged) {
+      landing = home;
+      applyLayout();
+    }
     page = next; selected = null; tab = 'overview';
     const browsing = next === 'knowledge-bases';
     const sidebar = Boolean(user());
     const accountPage = next === 'my-account';
-    if (!landing) {
-      const path = ['workspace', 'dashboard'].includes(next)
-        ? new URL(next + '.html', location.href).pathname : location.pathname;
+    {
+      const file = home ? (layoutChanged ? 'index.html' : '') : ['workspace', 'dashboard'].includes(next) ? next + '.html'
+        : layoutChanged ? (next === 'my-account' ? 'workspace.html' : 'dashboard.html') : '';
+      const path = file ? new URL(file, location.href).pathname : location.pathname;
       const hash = next !== 'workspace' && [...pages, ...superPages.filter(showSuperPage)].includes(next) ? '#' + next : '';
       const account = workspacePages.includes(next) ? workspaceAccount() : null;
       const previous = activeRoute;
@@ -193,7 +197,6 @@ export function createAdminPanel({ api, user, onError, sendUpload, onReady = () 
       }
     }
     $('dashboard-page-title').textContent = ({ dashboard: 'Dashboard', users: 'Users', 'user-details-add': 'Add User', requests: 'Upload requests', 'knowledge-bases': 'Knowledge Bases', 'my-account': 'My Account', roles: 'Role Management', 'permission-list': 'Permissions List', permissions: 'Permission Matrix', 'login-logs': 'Logs Management', 'user-uploads': 'User Uploads', revisions: 'Revision' })[next] || 'Workspace';
-    const home = next === 'home';
     document.body.classList.toggle('admin-layout', sidebar && !home);
     $('admin-sidebar').hidden = !sidebar || home; $('admin-menu-toggle').hidden = !sidebar || home;
     $('sidebar-role-label').textContent = user()?.role === 'user' ? 'User workspace' : 'Admin workspace';
@@ -225,7 +228,7 @@ export function createAdminPanel({ api, user, onError, sendUpload, onReady = () 
     $('user-management-label').hidden = !['users', 'requests', 'roles', 'user-uploads'].some(canVisit);
     $('my-account').hidden = !accountPage;
     $('my-account-link').hidden = !canVisit('my-account');
-    onPage(next);
+    onPage(next, layoutChanged);
     if (accountPage) $('my-account-title').focus({ preventScroll: true });
     $('admin-overview').hidden = next !== 'dashboard' || user()?.role !== 'admin';
     $('admin-content').hidden = !['users', 'requests'].includes(next);
@@ -245,6 +248,7 @@ export function createAdminPanel({ api, user, onError, sendUpload, onReady = () 
     }
     if (['users', 'requests'].includes(next)) render();
     window.scrollTo({ top: 0, behavior: 'instant' });
+    if (layoutChanged && !home) void refresh(true);
   }
   async function restoreRoute(route, fallback, historyMode) {
     const previous = activeRoute;
@@ -263,7 +267,7 @@ export function createAdminPanel({ api, user, onError, sendUpload, onReady = () 
   }
   window.addEventListener('popstate', event => {
     const route = event.state?.queryAssistantRoute;
-    if (!landing && user() && route?.owner === user().id) void restoreRoute(route, 'workspace', 'restore');
+    if (user() && route?.owner === user().id) void restoreRoute(route, defaultRoute(), 'restore');
   });
   async function loadBaseDocuments(domain, details, list, count, requestsForView) {
     try {
@@ -729,6 +733,11 @@ export function createAdminPanel({ api, user, onError, sendUpload, onReady = () 
     if (timer && user() && !landing && !hasManagement() && !document.hidden) void refresh(true);
   });
   document.querySelectorAll('[data-admin-page]').forEach(n => n.addEventListener('click', () => navigate(n.dataset.adminPage)));
+  $('admin-dashboard-entry').addEventListener('click', event => {
+    if (!user() || event.defaultPrevented || event.button !== 0 || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return;
+    event.preventDefault();
+    navigate(defaultRoute());
+  });
   $('my-account-link').addEventListener('click', () => {
     $('admin-menu').open = false;
     navigate('my-account');

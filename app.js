@@ -107,9 +107,13 @@ const adminPanel = createAdminPanel({ user: () => state.user, onError: message =
   onViewDocument: (hash, filename) => openPdf(hash, filename),
   knowledgeBases: () => state.domains,
   workspaceAccount: () => selectedWorkspaceAccount,
-  onPage: page => {
+  onPage: (page, layoutChanged) => {
     superPanel.show(page);
     showAccountSettings(page === 'my-account');
+    if (layoutChanged) {
+      renderMessages();
+      if (page !== 'home' && state.online && permitted('bases.add')) guide.show(state.user, state.domains);
+    }
   },
   onOpenBase: async key => {
     if (key === state.key) return true;
