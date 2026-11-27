@@ -505,7 +505,7 @@ body.admin-layout .shell { width:calc(100% - 64px); max-width:1550px; }
 body.admin-layout .hero,body.admin-layout .nav nav { display:none; }
 body.landing-page #workspace,body.landing-page #dashboard-help { display:none !important; }
 body.landing-page .nav { isolation:isolate; }
-body.landing-page .nav:has(.admin-menu[open] #admin-refresh[hidden]) { z-index:1; }
+.nav:has(.admin-menu[open]) { z-index: 1; }
 body.landing-page .nav::before {
   content:'';
   position:absolute;
