@@ -11,7 +11,7 @@ export function createAdminPanel({ api, user, onError, sendUpload, onReady = () 
   const el = (tag, text, cls = '') => { const n = document.createElement(tag); n.textContent = text; n.className = cls; return n; };
   let generation = 0, timer, people = [], requests = [], selected = null, tab = 'overview', page = 'dashboard', filter = 'pending', busy = false;
   let own = { policy: 'approval_required', requests: [] };
-  let refreshId = 0, activeRefresh = null, lastRefresh = 0, renderedOwn;
+  let refreshId = 0, activeRefresh = null, lastRefresh = 0, renderedOwn, renderedAdmin;
   let message = '';
   let selectedFile = null, selectedDomain = '';
   let landing = !/\/(workspace|dashboard)\.html$/.test(location.pathname);
@@ -99,6 +99,7 @@ export function createAdminPanel({ api, user, onError, sendUpload, onReady = () 
     activeRefresh = null;
     lastRefresh = 0;
     renderedOwn = undefined;
+    renderedAdmin = undefined;
     document.body.classList.remove('admin-layout');
     $('admin-sidebar').hidden = true; $('admin-overview').hidden = true; $('admin-content').hidden = true;
     $('user-upload-status').hidden = true; $('workspace').hidden = true;
@@ -132,7 +133,15 @@ export function createAdminPanel({ api, user, onError, sendUpload, onReady = () 
         $('admin-pending').textContent = count; $('admin-bell').textContent = `Notifications (${count})`;
         $('admin-total-users').textContent = people.length; $('admin-total-pending').textContent = count;
         const hasDraft = Array.from($('admin-content').querySelectorAll('textarea, input[type="search"]')).some(n => n.value);
-        if (['users', 'requests'].includes(page) && (!background || (!hasDraft && !$('admin-content').contains(document.activeElement)))) render();
+        const active = document.activeElement;
+        const activeFilter = page === 'requests' && active?.hasAttribute('aria-pressed')
+          && active.parentElement === $('admin-content').querySelector('.admin-actions') ? active.textContent : null;
+        const mayRender = !hasDraft && (activeFilter || !$('admin-content').contains(active));
+        if (['users', 'requests'].includes(page) && (!background || (mayRender && adminView() !== renderedAdmin))) {
+          render();
+          if (activeFilter) [...$('admin-content').querySelectorAll('.admin-actions button[aria-pressed]')]
+            .find(button => button.textContent === activeFilter)?.focus({ preventScroll: true });
+        }
         if (!landing && !managingUploads() && user()?.id !== 'local-admin' && !isSuper() && user()?.permissions?.['documents.view'] !== false) {
           const saved = await api('/upload-requests');
           if (current()) onApprovedUploads(saved.processing || []);
@@ -579,7 +588,9 @@ export function createAdminPanel({ api, user, onError, sendUpload, onReady = () 
       if (panel.isConnected) panel.replaceChildren(el('p', error.message));
     }
   }
+  const adminView = () => JSON.stringify([people, requests]);
   function render() {
+    renderedAdmin = adminView();
     const root = $('admin-content'); root.replaceChildren();
     if (selected) {
       const person = people.find(p => p.id === selected);
@@ -706,9 +717,10 @@ export function createAdminPanel({ api, user, onError, sendUpload, onReady = () 
   }
   function poll() {
     if (document.hidden) return;
+    const reviewsUploads = !landing && hasManagement() && can('approvals.view');
     const waiting = !landing && !hasManagement() && own.requests.some(row =>
       row.status === 'pending' || (row.status === 'approved' && ['queued', 'processing', 'retrying'].includes(row.job_state)));
-    if (Date.now() - lastRefresh >= (waiting ? 3000 : 30000)) void refresh(true);
+    if (Date.now() - lastRefresh >= (reviewsUploads || waiting ? 3000 : 30000)) void refresh(true);
   }
   async function start(onRouteReady, connection) {
     const version = generation;
@@ -730,7 +742,7 @@ export function createAdminPanel({ api, user, onError, sendUpload, onReady = () 
     if (version === generation) timer = setInterval(poll, 1000);
   }
   document.addEventListener('visibilitychange', () => {
-    if (timer && user() && !landing && !hasManagement() && !document.hidden) void refresh(true);
+    if (timer && user() && !landing && !document.hidden) void refresh(true);
   });
   document.querySelectorAll('[data-admin-page]').forEach(n => n.addEventListener('click', () => navigate(n.dataset.adminPage)));
   $('admin-dashboard-entry').addEventListener('click', event => {
@@ -754,7 +766,11 @@ export function createAdminPanel({ api, user, onError, sendUpload, onReady = () 
     event.preventDefault();
     navigate(page === 'knowledge-bases' ? 'workspace' : 'knowledge-bases');
   });
-  $('admin-bell').addEventListener('click', () => navigate('requests'));
+  $('admin-bell').addEventListener('click', () => {
+    filter = 'pending';
+    navigate('requests');
+    if (page === 'requests') void refresh(true);
+  });
   $('admin-menu-toggle').addEventListener('click', () => {
     if ($('admin-sidebar').classList.contains('is-open')) { closeNavigation(true); return; }
     $('admin-sidebar').classList.add('is-open'); backdrop.hidden = false; $('admin-menu-toggle').setAttribute('aria-expanded', 'true');
