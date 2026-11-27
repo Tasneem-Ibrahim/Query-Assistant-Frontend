@@ -11,6 +11,7 @@ export function createAdminPanel({ api, user, onError, sendUpload, onReady = () 
   const el = (tag, text, cls = '') => { const n = document.createElement(tag); n.textContent = text; n.className = cls; return n; };
   let generation = 0, timer, people = [], requests = [], selected = null, tab = 'overview', page = 'dashboard', filter = 'pending', busy = false;
   let own = { policy: 'approval_required', requests: [] };
+  let refreshId = 0, activeRefresh = null, lastRefresh = 0, renderedOwn;
   let message = '';
   let selectedFile = null, selectedDomain = '';
   const landing = !/\/(workspace|dashboard)\.html$/.test(location.pathname);
@@ -94,6 +95,9 @@ export function createAdminPanel({ api, user, onError, sendUpload, onReady = () 
   function reset() {
     generation++; clearInterval(timer); people = []; requests = []; selected = null; busy = false; message = ''; selectedFile = null; selectedDomain = '';
     own = { policy: 'approval_required', requests: [] };
+    activeRefresh = null;
+    lastRefresh = 0;
+    renderedOwn = undefined;
     document.body.classList.remove('admin-layout');
     $('admin-sidebar').hidden = true; $('admin-overview').hidden = true; $('admin-content').hidden = true;
     $('user-upload-status').hidden = true; $('workspace').hidden = true;
@@ -108,13 +112,18 @@ export function createAdminPanel({ api, user, onError, sendUpload, onReady = () 
     closeNavigation();
   }
   async function refresh(background = false) {
+    if (background && activeRefresh !== null) return;
     const version = generation;
+    const id = ++refreshId;
+    const current = () => version === generation && id === refreshId;
+    activeRefresh = id;
+    lastRefresh = Date.now();
     try {
       const isAdmin = isAdminAccount();
       const canLoadAdmin = hasManagement() && (can('accounts.view') || can('approvals.view'));
       if (!hasManagement() && !can('documents.view')) return;
       const managed = canLoadAdmin ? await api('/admin/users') : { users: [], requests: [] };
-      if (version !== generation) return;
+      if (!current()) return;
       $('admin-sync-status').textContent = '';
       if (hasManagement()) {
         people = managed.users; requests = managed.requests;
@@ -125,11 +134,11 @@ export function createAdminPanel({ api, user, onError, sendUpload, onReady = () 
         if (['users', 'requests'].includes(page) && (!background || (!hasDraft && !$('admin-content').contains(document.activeElement)))) render();
         if (!landing && !managingUploads() && user()?.id !== 'local-admin' && !isSuper() && user()?.permissions?.['documents.view'] !== false) {
           const saved = await api('/upload-requests');
-          if (version === generation) onApprovedUploads(saved.processing || []);
+          if (current()) onApprovedUploads(saved.processing || []);
         }
       } else if (can('documents.view')) {
         const data = await api('/upload-requests');
-        if (version !== generation) return;
+        if (!current()) return;
         const readyDocuments = data.ready_documents || data.requests.filter(r => r.job_state === 'ready');
         const previousReady = own.ready_documents || own.requests.filter(r => r.job_state === 'ready');
         const becameReady = readyDocuments.some(r => !previousReady.some(old => old.domain === r.domain && old.file_hash === r.file_hash));
@@ -137,13 +146,15 @@ export function createAdminPanel({ api, user, onError, sendUpload, onReady = () 
         const failed = data.requests.find(r => r.job_state === 'failed' && own.requests.find(old => old.id === r.id)?.job_state !== 'failed');
         own = data;
         if (!landing) onApprovedUploads(data.processing || []);
-        if (!background || !$('user-upload-status').contains(document.activeElement)) renderOwn();
+        const root = $('user-upload-status');
+        if (!background || (ownView() !== renderedOwn && !root.contains(document.activeElement))) renderOwn();
         if (becameReady) onReady(readyDocuments);
         if (failed) onError(failed.job_message || 'Processing failed after the single retry. Contact the administrator.');
         else if (becameReady) onError('Your processed document is ready. You can now ask questions and search it.');
         else if (approved) onError('Your upload was approved. It will be processed automatically; no re-upload is needed.');
       }
     } catch (error) { if (version === generation) { if (isAdminAccount()) { $('admin-total-users').textContent = '—'; $('admin-total-pending').textContent = '—'; } $('admin-sync-status').textContent = error.message; onError(error.message); } }
+    finally { if (activeRefresh === id) activeRefresh = null; }
   }
   async function change(path, body) {
     if (busy) return;
@@ -645,8 +656,13 @@ export function createAdminPanel({ api, user, onError, sendUpload, onReady = () 
       items.forEach(r => root.append(requestCard(r, true)));
     }
   }
+  const ownView = () => JSON.stringify([own.policy, own.requests]);
   function renderOwn() {
-    const root = $('user-upload-status'); root.hidden = false; root.replaceChildren();
+    const root = $('user-upload-status');
+    const wasOpen = root.querySelector(':scope > details')?.open;
+    const wasEmpty = root.querySelector(':scope > details > summary')?.textContent === 'Your requests (0)';
+    root.hidden = false; root.replaceChildren();
+    renderedOwn = ownView();
     root.append(el('h3', 'Your upload permissions'), el('p', own.policy === 'blocked' ? 'Uploads are blocked. Contact your administrator.' : own.policy === 'allowed' ? 'Upload once. Your saved file will process automatically.' : 'Upload your file once. After admin approval, processing starts automatically.'));
     if (own.policy === 'approval_required' && selectedFile) {
       const label = el('label', 'Message to admin (optional)'); label.htmlFor = 'upload-request-message';
@@ -659,7 +675,7 @@ export function createAdminPanel({ api, user, onError, sendUpload, onReady = () 
       input.addEventListener('keydown', event => { if ((event.ctrlKey || event.metaKey) && event.key === 'Enter') { event.preventDefault(); if (!$('upload').disabled) $('upload').click(); } });
       root.append(label, input, help);
     }
-    const details = document.createElement('details'); details.open = own.requests.length > 0; details.append(el('summary', `Your requests (${own.requests.length})`));
+    const details = document.createElement('details'); details.open = wasEmpty ? own.requests.length > 0 : (wasOpen ?? own.requests.length > 0); details.append(el('summary', `Your requests (${own.requests.length})`));
     if (!own.requests.length) details.append(el('p', 'No uploads yet. Select a file and use Upload & process to save it and request approval.'));
     own.requests.forEach(r => details.append(requestCard(r, false))); root.append(details);
   }
@@ -684,7 +700,13 @@ export function createAdminPanel({ api, user, onError, sendUpload, onReady = () 
     await refresh();
     return row;
   }
-  async function start(onRouteReady) {
+  function poll() {
+    if (document.hidden) return;
+    const waiting = !landing && !hasManagement() && own.requests.some(row =>
+      row.status === 'pending' || (row.status === 'approved' && ['queued', 'processing', 'retrying'].includes(row.job_state)));
+    if (Date.now() - lastRefresh >= (waiting ? 3000 : 30000)) void refresh(true);
+  }
+  async function start(onRouteReady, connection) {
     const version = generation;
     const requestedPage = location.hash.slice(1);
     const fallback = landing ? 'home' : canVisit(requestedPage) ? requestedPage
@@ -698,8 +720,14 @@ export function createAdminPanel({ api, user, onError, sendUpload, onReady = () 
     $('admin-refresh').hidden = regularUser;
     onRouteReady();
     if (page === 'knowledge-bases') $('knowledge-bases-title').focus({ preventScroll: true });
-    await refresh(); if (version === generation) timer = setInterval(() => refresh(true), 30000);
+    await connection;
+    if (version !== generation) return;
+    await refresh();
+    if (version === generation) timer = setInterval(poll, 1000);
   }
+  document.addEventListener('visibilitychange', () => {
+    if (timer && user() && !landing && !hasManagement() && !document.hidden) void refresh(true);
+  });
   document.querySelectorAll('[data-admin-page]').forEach(n => n.addEventListener('click', () => navigate(n.dataset.adminPage)));
   $('my-account-link').addEventListener('click', () => {
     $('admin-menu').open = false;

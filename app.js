@@ -537,13 +537,19 @@ async function showImageText(fileHash) {
   }
 }
 $('close-ocr-preview').addEventListener('click', clearImageText);
-async function refresh() {
+let statusRequest = 0;
+async function refresh({ background = false } = {}) {
+  const requestId = ++statusRequest;
   if (!state.key || !permitted('documents.view')) { state.status = null; renderStatus(); return; }
   const key = state.key, generation = state.generation;
-  state.status = null; controls();
-  try { const result = await json(`/domains/${encodeURIComponent(key)}/status`); if (key === state.key && generation === state.generation) state.status = result; }
+  const current = () => requestId === statusRequest && key === state.key && generation === state.generation;
+  if (!background) { state.status = null; controls(); }
+  try {
+    const result = await json(`/domains/${encodeURIComponent(key)}/status`);
+    if (current()) state.status = result;
+  }
   finally {
-    if (generation === state.generation) {
+    if (current()) {
       renderStatus();
       const messages = state.mode === 'chat' ? history() : (state.results[state.key] || []);
       if (!messages.length) renderMessages();
@@ -556,7 +562,7 @@ async function refreshApprovedDocuments(rows = []) {
     const ready = rows.find(row => state.domains.some(domain => domain.key === row.domain));
     if (ready) { $('domain').value = ready.domain; await selectDomain(); return; }
   }
-  await refresh();
+  await refresh({ background: true });
 }
 let confirmationPending = false;
 function confirmDeletion(title, description, actionLabel = 'Permanently delete', { revision = false } = {}) {
@@ -639,15 +645,16 @@ async function connect() {
   const generation = ++state.generation;
   state.online = false; state.status = null; state.domains = []; state.key = ''; controls(); renderStatus(); renderMessages();
   try {
-    const health = await json('/health');
+    const [health, domains] = await Promise.all([
+      json('/health'),
+      !state.user?.access_suspended && permitted('bases.view') ? json('/domains') : [],
+    ]);
     if (generation !== state.generation) return;
     if (state.user?.access_suspended) {
       notice('Admin workspace access is paused. Contact Super Admin.');
       return;
     }
     if (!health.ok) throw new Error(health.configuration_errors?.join('. ') || 'Backend is not configured.');
-    const domains = permitted('bases.view') ? await json('/domains') : [];
-    if (generation !== state.generation) return;
     if (!Array.isArray(domains)) throw new Error('Invalid knowledge base response from the backend.');
     state.cloud = health.storage === 'supabase';
     state.domains = domains; state.online = true;
@@ -1140,12 +1147,23 @@ async function openWorkspace(user) {
   $('admin-password').value = ''; $('confirm-password').value = '';
   setPasswordVisible(false);
   $('login-gate').hidden = true;
-  await connect();
+  const connection = connect();
+  // Restoring a scoped route can start its own connection for the selected account.
+  const restoreScopedRoute = history.state?.queryAssistantRoute?.owner === user.id
+    && history.state.queryAssistantRoute.account;
+  if (restoreScopedRoute) await connection;
   if (state.user !== user) return;
-  await adminPanel.start(() => {
+  const generation = state.generation;
+  const panel = adminPanel.start(() => {
+    if (!restoreScopedRoute) adminPanel.renderKnowledgeBases('Loading knowledge bases…');
     $('admin-app').hidden = false; $('admin-app').inert = false;
     $('session-loading').hidden = true;
-  });
+  }, connection);
+  if (!restoreScopedRoute) {
+    const error = await connection;
+    if (state.user === user && generation === state.generation) adminPanel.renderKnowledgeBases(error);
+  }
+  await panel;
 }
 $('login-form').addEventListener('submit', async event => {
   event.preventDefault();
