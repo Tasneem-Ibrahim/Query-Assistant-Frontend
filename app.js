@@ -107,7 +107,10 @@ const adminPanel = createAdminPanel({ user: () => state.user, onError: message =
   onViewDocument: (hash, filename) => openPdf(hash, filename),
   knowledgeBases: () => state.domains,
   workspaceAccount: () => selectedWorkspaceAccount,
-  onPage: page => superPanel.show(page),
+  onPage: page => {
+    superPanel.show(page);
+    showAccountSettings(page === 'my-account');
+  },
   onOpenBase: async key => {
     if (key === state.key) return true;
     if (state.busy || !state.domains.some(domain => domain.key === key)) return false;
@@ -854,6 +857,92 @@ function setPasswordVisible(visible) {
 $('toggle-password').addEventListener('click', () => {
   setPasswordVisible($('admin-password').type === 'password');
 });
+let accountView;
+function showAccountSettings(open) {
+  accountView?.abort();
+  accountView = null;
+  $('my-account-password-form').reset();
+  $('my-account-name-status').textContent = '';
+  $('my-account-password-status').textContent = '';
+  if (!open || state.user?.role !== 'user') {
+    $('my-account-email').textContent = '';
+    $('my-account-email-status').textContent = '';
+    $('my-account-name').value = '';
+    $('my-account-created').textContent = '';
+    $('my-account-mfa').textContent = '';
+    return;
+  }
+  const user = state.user;
+  $('my-account-email').textContent = user.email;
+  $('my-account-email-status').textContent = user.email_verified === true ? 'Verified' : user.email_verified === false ? 'Unverified' : '';
+  $('my-account-name').value = user.name || '';
+  const created = new Date(user.created_at || NaN);
+  $('my-account-created-row').hidden = Number.isNaN(created.getTime());
+  $('my-account-created').textContent = $('my-account-created-row').hidden ? '' : created.toLocaleDateString(undefined, { dateStyle: 'long' });
+  const view = accountView = new AbortController();
+  $('my-account-mfa').textContent = 'Checking…';
+  void (async () => {
+    try {
+      const { mfa_enabled } = await (await request(base, '/auth/account', { signal: view.signal })).json();
+      if (accountView === view) $('my-account-mfa').textContent = mfa_enabled ? 'Enabled' : 'Setup required at sign-in';
+    } catch {
+      if (accountView === view) $('my-account-mfa').textContent = 'Status unavailable';
+    }
+  })();
+}
+
+$('my-account-name-form').addEventListener('submit', async event => {
+  event.preventDefault();
+  const view = accountView, user = state.user;
+  if (!view || user?.role !== 'user') return;
+  const submit = event.currentTarget.querySelector('button');
+  const status = $('my-account-name-status');
+  const name = $('my-account-name').value.trim();
+  if (!name) { status.textContent = 'Enter your display name.'; return; }
+  submit.disabled = true;
+  status.textContent = 'Saving…';
+  try {
+    const response = await request(base, '/auth/account', { method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ name }) });
+    const saved = await response.json();
+    if (state.user !== user) return;
+    user.name = saved.name;
+    $('account-name').textContent = saved.name;
+    if (accountView === view) {
+      $('my-account-name').value = saved.name;
+      status.textContent = 'Display name saved.';
+    }
+  } catch (error) {
+    if (accountView === view) status.textContent = error.message;
+  } finally { submit.disabled = false; }
+});
+
+$('my-account-password-form').addEventListener('submit', async event => {
+  event.preventDefault();
+  const view = accountView;
+  if (!view || state.user?.role !== 'user') return;
+  const form = event.currentTarget;
+  const submit = form.querySelector('button');
+  const status = $('my-account-password-status');
+  const current_password = $('my-account-current-password').value;
+  const new_password = $('my-account-new-password').value;
+  if (new_password !== $('my-account-confirm-password').value) {
+    status.textContent = 'New passwords do not match.';
+    return;
+  }
+  submit.disabled = true;
+  status.textContent = 'Updating…';
+  try {
+    await json('/auth/account/password', { current_password, new_password });
+    if (accountView === view) {
+      form.reset();
+      status.textContent = 'Password changed.';
+    }
+  } catch (error) {
+    if (accountView === view) status.textContent = error.message;
+  } finally { submit.disabled = false; }
+});
+
 function showLogin() {
   managedUploadAccount = null;
   document.body.classList.remove('managed-uploads');
@@ -861,6 +950,7 @@ function showLogin() {
   savedProcessor.reset();
   if (originalPdfDialog.open) originalPdfDialog.close();
   adminPanel.reset();
+  showAccountSettings(false);
   superPanel.reset();
   selectWorkspaceAccount();
   selectedWorkspaceAccount = null;

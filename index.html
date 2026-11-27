@@ -97,6 +97,7 @@
       <details id="admin-menu" class="admin-menu">
         <summary><span id="account-name">Account</span> <svg class="admin-chevron" viewBox="0 0 16 16" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true"><path d="m4 6 4 4 4-4"/></svg></summary>
         <div class="admin-dropdown">
+          <button id="my-account-link" type="button" hidden>My Account</button>
           <button id="admin-logout" type="button">Sign out</button>
         </div>
       </details>
@@ -104,6 +105,43 @@
   </header>
 
   <main>
+    <section id="my-account" class="shell" hidden aria-labelledby="my-account-title">
+      <h1 id="my-account-title" tabindex="-1">My Account</h1>
+      <div class="account-settings-grid">
+        <article class="panel account-settings-card">
+          <h2>Account details</h2>
+          <dl class="account-details">
+            <div><dt>Email</dt><dd><span id="my-account-email"></span> <small id="my-account-email-status"></small></dd></div>
+            <div><dt>Role</dt><dd>User</dd></div>
+            <div id="my-account-created-row" hidden><dt>Member since</dt><dd id="my-account-created"></dd></div>
+          </dl>
+          <form id="my-account-name-form">
+            <label for="my-account-name">Display name</label>
+            <input id="my-account-name" name="name" autocomplete="name" required maxlength="80">
+            <div><button class="button secondary" type="submit">Save name</button></div>
+            <p id="my-account-name-status" role="status"></p>
+          </form>
+        </article>
+        <article class="panel account-settings-card">
+          <h2>Security</h2>
+          <dl class="account-details">
+            <div><dt>Two-factor authentication</dt><dd id="my-account-mfa" role="status"></dd></div>
+          </dl>
+          <form id="my-account-password-form">
+            <h3>Change password</h3>
+            <label for="my-account-current-password">Current password</label>
+            <input id="my-account-current-password" type="password" autocomplete="current-password" required maxlength="256">
+            <label for="my-account-new-password">New password</label>
+            <input id="my-account-new-password" type="password" autocomplete="new-password" required minlength="8" maxlength="256" aria-describedby="my-account-password-hint">
+            <small id="my-account-password-hint">Use at least 8 characters.</small>
+            <label for="my-account-confirm-password">Confirm new password</label>
+            <input id="my-account-confirm-password" type="password" autocomplete="new-password" required minlength="8" maxlength="256">
+            <div><button class="button primary" type="submit">Change password</button></div>
+            <p id="my-account-password-status" role="status"></p>
+          </form>
+        </article>
+      </div>
+    </section>
     <section id="knowledge-bases" class="shell" hidden aria-labelledby="knowledge-bases-title">
       <h1 id="knowledge-bases-title" tabindex="-1">Knowledge Bases</h1>
       <p id="knowledge-bases-description">Browse your knowledge bases and their documents.</p>

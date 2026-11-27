@@ -26,7 +26,7 @@ export function createAdminPanel({ api, user, onError, sendUpload, onReady = () 
     $('dashboard-page-title').textContent = 'Workspace';
     $('workspace-title').textContent = 'Documents & assistant';
   }
-  const pages = ['users', 'requests', 'knowledge-bases', 'user-details-add'];
+  const pages = ['users', 'requests', 'knowledge-bases', 'user-details-add', 'my-account'];
   const superPages = ['roles', 'permission-list', 'permissions', 'user-uploads', 'login-logs', 'revisions', 'workspace'];
   const superPermissions = { roles: 'roles.view', 'user-uploads': 'user_uploads.view', 'permission-list': 'permissions.view', permissions: 'permissions.view',
     'login-logs': 'logs.view', revisions: 'revisions.view' };
@@ -40,6 +40,7 @@ export function createAdminPanel({ api, user, onError, sendUpload, onReady = () 
   const canVisit = destination => {
     if (destination === 'user-details-add') return canAddUser();
     const regular = user()?.role === 'user';
+    if (destination === 'my-account') return regular;
     if (destination === 'dashboard') return !regular;
     if (superPages.includes(destination) && destination !== 'workspace') return showSuperPage(destination);
     const permission = pagePermissions[destination];
@@ -98,6 +99,7 @@ export function createAdminPanel({ api, user, onError, sendUpload, onReady = () 
     $('user-upload-status').hidden = true; $('workspace').hidden = true;
     $('admin-content').replaceChildren(); $('user-upload-status').replaceChildren();
     $('knowledge-bases').hidden = true; $('knowledge-bases-link').hidden = true;
+    $('my-account').hidden = true; $('my-account-link').hidden = true;
     $('admin-menu').open = false;
     $('knowledge-base-list').replaceChildren();
     $('admin-bell').hidden = true; $('admin-menu-toggle').hidden = true; $('admin-sync-status').textContent = '';
@@ -159,10 +161,12 @@ export function createAdminPanel({ api, user, onError, sendUpload, onReady = () 
     if (!canVisit(next)) { next = defaultRoute(); historyMode = 'replace'; }
     if (next === 'home' && !landing) { location.assign('index.html'); return; }
     if (next === 'workspace' && landing) { location.assign('workspace.html'); return; }
+    if (next === 'my-account' && landing) { location.assign('workspace.html#my-account'); return; }
     if (next !== 'home' && landing) { location.assign(`dashboard.html${next === 'dashboard' ? '' : '#' + next}`); return; }
     page = next; selected = null; tab = 'overview';
     const browsing = next === 'knowledge-bases';
     const sidebar = Boolean(user());
+    const accountPage = next === 'my-account';
     if (!landing) {
       const path = ['workspace', 'dashboard'].includes(next)
         ? new URL(next + '.html', location.href).pathname : location.pathname;
@@ -177,12 +181,12 @@ export function createAdminPanel({ api, user, onError, sendUpload, onReady = () 
         history[push ? 'pushState' : 'replaceState']({ queryAssistantRoute: activeRoute }, '', path + location.search + hash);
       }
     }
-    $('dashboard-page-title').textContent = ({ dashboard: 'Dashboard', users: 'Users', 'user-details-add': 'Add User', requests: 'Upload requests', 'knowledge-bases': 'Knowledge Bases', roles: 'Role Management', 'permission-list': 'Permissions List', permissions: 'Permission Matrix', 'login-logs': 'Logs Management', 'user-uploads': 'User Uploads', revisions: 'Revision' })[next] || 'Workspace';
+    $('dashboard-page-title').textContent = ({ dashboard: 'Dashboard', users: 'Users', 'user-details-add': 'Add User', requests: 'Upload requests', 'knowledge-bases': 'Knowledge Bases', 'my-account': 'My Account', roles: 'Role Management', 'permission-list': 'Permissions List', permissions: 'Permission Matrix', 'login-logs': 'Logs Management', 'user-uploads': 'User Uploads', revisions: 'Revision' })[next] || 'Workspace';
     const home = next === 'home';
     document.body.classList.toggle('admin-layout', sidebar && !home);
     $('admin-sidebar').hidden = !sidebar || home; $('admin-menu-toggle').hidden = !sidebar || home;
     $('sidebar-role-label').textContent = user()?.role === 'user' ? 'User workspace' : 'Admin workspace';
-    $('admin-dashboard-entry').hidden = !home; $('admin-sync').hidden = home || browsing;
+    $('admin-dashboard-entry').hidden = !home; $('admin-sync').hidden = home || browsing || accountPage;
     $('admin-bell').hidden = !sidebar || home || !canVisit('requests');
     $('workspace').hidden = !canVisit('workspace') || (next !== 'workspace' && (next !== 'dashboard' || isSuper()));
     $('super-workspace-scope').hidden = !(isSuper() || managingUploads())
@@ -208,7 +212,10 @@ export function createAdminPanel({ api, user, onError, sendUpload, onReady = () 
     });
     $('super-settings-label').hidden = !['permission-list', 'permissions', 'login-logs', 'revisions'].some(canVisit);
     $('user-management-label').hidden = !['users', 'requests', 'roles', 'user-uploads'].some(canVisit);
+    $('my-account').hidden = !accountPage;
+    $('my-account-link').hidden = !canVisit('my-account');
     onPage(next);
+    if (accountPage) $('my-account-title').focus({ preventScroll: true });
     $('admin-overview').hidden = next !== 'dashboard' || user()?.role !== 'admin';
     $('admin-content').hidden = !['users', 'requests'].includes(next);
     $('knowledge-bases').hidden = !browsing;
@@ -694,6 +701,10 @@ export function createAdminPanel({ api, user, onError, sendUpload, onReady = () 
     await refresh(); if (version === generation) timer = setInterval(() => refresh(true), 30000);
   }
   document.querySelectorAll('[data-admin-page]').forEach(n => n.addEventListener('click', () => navigate(n.dataset.adminPage)));
+  $('my-account-link').addEventListener('click', () => {
+    $('admin-menu').open = false;
+    navigate('my-account');
+  });
   document.querySelectorAll('[data-super-page]').forEach(n => n.addEventListener('click', () => navigate(n.dataset.superPage)));
   for (const link of userWorkspaceLinks) {
     link.addEventListener('click', () => {
